@@ -1,0 +1,46 @@
+{
+  "name": "slate",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "aws-amplify": "^6.20.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@aws-amplify/backend": "^1.25.0",
+    "@aws-amplify/backend-cli": "^1.10.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "aws-cdk-lib": "^2.268.0",
+    "constructs": "^10.8.1",
+    "create-amplify": "^1.4.0",
+    "esbuild": "^0.28.2",
+    "oxlint": "^1.81.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0"
+  },
+  "overrides": {
+    "@aws-sdk/client-lambda": "3.1134.0",
+    "@aws-sdk/client-secrets-manager": "3.1134.0",
+    "@aws-sdk/client-iam": "3.1134.0",
+    "@aws-sdk/client-sts": "3.1134.0",
+    "@aws-sdk/client-cloudformation": "3.1134.0",
+    "@aws-sdk/client-s3": "3.1134.0",
+    "@aws-sdk/client-appsync": "3.1134.0",
+    "@aws-sdk/client-dynamodb": "3.1134.0",
+    "@aws-sdk/client-cognito-identity-provider": "3.1134.0",
+    "@aws-sdk/client-amplify": "3.1134.0",
+    "@aws-sdk/client-ssm": "3.1134.0"
+  }
+}
