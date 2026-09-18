@@ -3,20 +3,35 @@ import { courseColor } from '../lib/courseColor'
 import { courseFullName } from '../lib/courseNames'
 import './TimetableGrid.css'
 
-/** How many consecutive HOURS columns (starting at hi) a busy entry
- * actually covers, given its real start/end time -- so a 2-hour class
- * renders as one wide cell instead of repeating in each hour column it
- * touches. Stops at any gap in HOURS (e.g. lunch), which shouldn't
- * happen in real data but guards against a bad merge producing one. */
-function spanCount(entry: BusyEntry, hi: number): number {
-  let span = 0
-  for (let j = hi; j < HOURS.length; j++) {
-    const hour = HOURS[j]
-    if (hour.start < entry.startTime || hour.end > entry.endTime) break
-    if (j > hi && hour.start !== HOURS[j - 1].end) break
+function entryKey(e: BusyEntry): string {
+  return e.id ?? `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.section ?? ''}`
+}
+
+/** True when two hour-columns' busy lists are the exact same set of
+ * entries -- i.e. genuinely the same multi-hour class continuing, not
+ * just "some entry here happens to be long enough to cover both." */
+function sameEntries(a: BusyEntry[], b: BusyEntry[]): boolean {
+  if (a.length !== b.length) return false
+  const keys = new Set(a.map(entryKey))
+  return b.every((e) => keys.has(entryKey(e)))
+}
+
+/** How many consecutive HOURS columns (starting at hi) render as one
+ * wide cell. Only merges a column into the span when it holds the exact
+ * same busy entries as hi -- if a *different* class starts partway
+ * through what looks like a multi-hour block (e.g. a neighboring 1-hour
+ * class squeezed next to a 2-hour one), the span stops there instead of
+ * skipping over it and silently dropping it from the render. */
+function spanCount(grid: Cell[][], di: number, hi: number): number {
+  const cell = grid[di][hi]
+  if (cell.busy.length === 0) return 1
+  let span = 1
+  for (let j = hi + 1; j < HOURS.length; j++) {
+    if (HOURS[j].start !== HOURS[j - 1].end) break // gap (lunch)
+    if (!sameEntries(grid[di][j].busy, cell.busy)) break
     span++
   }
-  return Math.max(span, 1)
+  return span
 }
 
 export default function TimetableGrid({
@@ -53,10 +68,7 @@ export default function TimetableGrid({
           let hi = 0
           while (hi < HOURS.length) {
             const cell = grid[di][hi]
-            const colSpan =
-              cell.busy.length > 0
-                ? Math.max(...cell.busy.map((b) => spanCount(b, hi)))
-                : 1
+            const colSpan = spanCount(grid, di, hi)
             cells.push(
               <GridCell
                 key={HOURS[hi].start}
