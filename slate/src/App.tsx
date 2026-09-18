@@ -30,37 +30,36 @@ function AppShell({
         : 'role-pill student'
 
   return (
-    <div className="admin-shell">
-      <aside className="sidebar">
+    <div className="app-shell">
+      <header className="topbar-nav">
         <div className="brand">
           <span className="brand-mark">S</span>
           <span>Slate</span>
         </div>
-        <p className="sidebar-label">Menu</p>
-        {navItems.map((item) => (
-          <button
-            key={item.key}
-            className={`nav-item${item.active ? ' active' : ''}`}
-            onClick={item.onClick}
-          >
-            {item.label}
-          </button>
-        ))}
-        <div className="sidebar-bottom">
-          <div className="profile">
-            <span className="avatar">{profile.email.charAt(0).toUpperCase()}</span>
-            <div>
-              <strong>{profile.email}</strong>
-              <small>
-                <span className={rolePillClass}>{profile.role}</span>
-              </small>
-            </div>
+        <nav className="top-nav-items">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={`nav-item${item.active ? ' active' : ''}`}
+              onClick={item.onClick}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="profile">
+          <span className="avatar">{profile.email.charAt(0).toUpperCase()}</span>
+          <div>
+            <strong>{profile.email}</strong>
+            <small>
+              <span className={rolePillClass}>{profile.role}</span>
+            </small>
           </div>
-          <button className="logout" onClick={onSignOut}>
-            Sign out
-          </button>
         </div>
-      </aside>
+        <button className="logout" onClick={onSignOut}>
+          Sign out
+        </button>
+      </header>
       <main className="admin-content">{children}</main>
     </div>
   )
@@ -76,7 +75,7 @@ function App() {
       {({ signOut, user }) => {
         if (loading || !profile) {
           return (
-            <div className="admin-shell">
+            <div className="app-shell">
               <main className="admin-content">
                 <p>Loading...</p>
               </main>

@@ -86,8 +86,10 @@ function GridCell({
             className={`course-block${editable ? ' editable' : ''}`}
             onClick={onBusyClick ? () => onBusyClick(b) : undefined}
           >
-            <span className="course">{b.courseId}</span>
-            {b.section && <span className="meta">Sec {b.section}</span>}
+            <div className="course-line">
+              <span className="course">{b.courseId}</span>
+              {b.section && <span className="meta">Sec {b.section}</span>}
+            </div>
             {b.room && <span className="meta">{b.room}</span>}
           </div>
         ))}

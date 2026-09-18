@@ -11,7 +11,7 @@
 .timetable-grid th,
 .timetable-grid td {
   border: 1px solid var(--border);
-  padding: 12px 14px;
+  padding: 8px 10px;
   text-align: left;
   vertical-align: top;
   min-width: 150px;
@@ -33,7 +33,7 @@
 }
 
 .grid-cell {
-  height: 76px;
+  height: 44px;
   background: var(--bg);
 }
 
@@ -60,14 +60,20 @@
 .course-block {
   display: flex;
   flex-direction: column;
-  margin-bottom: 6px;
-  gap: 1px;
+  margin-bottom: 3px;
+  gap: 0;
+}
+
+.course-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .course-block.editable {
   cursor: pointer;
-  padding: 4px 6px;
-  margin: -4px -6px 2px;
+  padding: 2px 5px;
+  margin: -2px -5px 1px;
   border-radius: 5px;
   transition: background 0.12s ease;
 }
@@ -89,8 +95,8 @@
   display: block;
   text-align: center;
   color: var(--border);
-  font-size: 16px;
-  line-height: 46px;
+  font-size: 14px;
+  line-height: 28px;
 }
 
 .grid-cell.editable-empty:hover .add-hint {
@@ -99,13 +105,13 @@
 
 .course {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-h);
 }
 
 .meta,
 .tag {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
