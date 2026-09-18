@@ -30,11 +30,14 @@ const deleteSlot = client.models.TimetableSlot.delete as unknown as (
   input: { id: string },
 ) => Promise<{ errors?: { message: string }[] }>
 
-type SectionRef = { program: string; branch: string; section: string; semester: number }
+// Program + branch + semester only -- a "batch," matching the source
+// spreadsheet's own layout of one grid per semester with every section's
+// classes stacked together in each cell, not one grid per section.
+type BatchRef = { program: string; branch: string; semester: number }
 
 export default function AdminTimetableEditor() {
-  const [options, setOptions] = useState<SectionRef[]>([])
-  const [selected, setSelected] = useState<SectionRef | null>(null)
+  const [options, setOptions] = useState<BatchRef[]>([])
+  const [selected, setSelected] = useState<BatchRef | null>(null)
   const [rows, setRows] = useState<SlotRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Partial<SlotRow> | null>(null)
@@ -43,46 +46,41 @@ export default function AdminTimetableEditor() {
   useEffect(() => {
     listSlots().then(({ data }) => {
       const seen = new Set<string>()
-      const opts: SectionRef[] = []
+      const opts: BatchRef[] = []
       for (const r of data) {
-        const key = `${r.program}|${r.branch}|${r.section}|${r.semester}`
+        const key = `${r.program}|${r.branch}|${r.semester}`
         if (!seen.has(key)) {
           seen.add(key)
-          opts.push({ program: r.program, branch: r.branch, section: r.section, semester: r.semester })
+          opts.push({ program: r.program, branch: r.branch, semester: r.semester })
         }
       }
-      opts.sort((a, b) => a.semester - b.semester || a.section.localeCompare(b.section))
+      opts.sort((a, b) => a.semester - b.semester)
       setOptions(opts)
       setLoading(false)
     })
   }, [])
 
-  const loadRows = (sel: SectionRef) => {
+  const loadRows = (sel: BatchRef) => {
     setLoading(true)
     listSlots().then(({ data }) => {
       setRows(
         data.filter(
-          (r) =>
-            r.program === sel.program &&
-            r.branch === sel.branch &&
-            r.section === sel.section &&
-            r.semester === sel.semester,
+          (r) => r.program === sel.program && r.branch === sel.branch && r.semester === sel.semester,
         ),
       )
       setLoading(false)
     })
   }
 
-  const select = (sel: SectionRef) => {
+  const select = (sel: BatchRef) => {
     setSelected(sel)
     loadRows(sel)
   }
 
-  const grid: Cell[][] | null = selected
-    ? buildGrid(
-        rows.map((r) => ({ ...r } as BusyEntry)),
-      )
-    : null
+  // All sections' rows go into the same grid -- buildGrid already stacks
+  // multiple entries that land in the same day/hour, same as the source
+  // spreadsheet's cells.
+  const grid: Cell[][] | null = selected ? buildGrid(rows.map((r) => ({ ...r } as BusyEntry))) : null
 
   const handleBusyClick = (entry: BusyEntry) => {
     const row = rows.find((r) => r.id === entry.id)
@@ -97,8 +95,8 @@ export default function AdminTimetableEditor() {
       endTime: end,
       program: selected.program,
       branch: selected.branch,
-      section: selected.section,
       semester: selected.semester,
+      section: '',
       courseId: '',
       room: '',
       faculty: '',
@@ -142,25 +140,25 @@ export default function AdminTimetableEditor() {
     <div className="dashboard">
       <h1>Correct Timetable Data</h1>
       <p className="subtitle">
-        Click any class to fix or remove it. Click an empty cell to add a missing one.
+        One grid per semester, every section's classes together — same layout as the source
+        sheet. Click any class to fix or remove it. Click an empty cell to add a missing one.
       </p>
 
       <div className="option-list">
         {options.map((opt) => (
           <button
-            key={`${opt.program}-${opt.branch}-${opt.section}-${opt.semester}`}
+            key={`${opt.program}-${opt.branch}-${opt.semester}`}
             className={
               selected &&
               selected.program === opt.program &&
               selected.branch === opt.branch &&
-              selected.section === opt.section &&
               selected.semester === opt.semester
                 ? 'active'
                 : ''
             }
             onClick={() => select(opt)}
           >
-            {opt.program} {opt.branch} Sem {opt.semester} — Sec {opt.section}
+            {opt.program} {opt.branch} — Semester {opt.semester}
           </button>
         ))}
       </div>
@@ -245,7 +243,11 @@ function EditForm({
         </label>
         <label>
           Section
-          <input value={value.section ?? ''} onChange={(e) => set({ section: e.target.value })} />
+          <input
+            value={value.section ?? ''}
+            placeholder="e.g. A, B1"
+            onChange={(e) => set({ section: e.target.value })}
+          />
         </label>
         <label>
           Room
