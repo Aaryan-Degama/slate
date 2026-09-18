@@ -9,14 +9,14 @@ const client = generateClient<Schema>()
 export type Profile = {
   id: string
   email: string
-  role: 'FACULTY' | 'STUDENT'
+  role: 'STUDENT' | 'FACULTY' | 'ADMIN'
   linkedSection: { program: string; branch: string; section: string } | null
   linkedFacultyName: string | null
 }
 const listMyUsers = client.models.User.list as unknown as () => Promise<{ data: Profile[] }>
 const createUser = client.models.User.create as unknown as (input: {
   email: string
-  role: 'FACULTY' | 'STUDENT'
+  role: 'STUDENT' | 'FACULTY' | 'ADMIN'
 }) => Promise<{ data: Profile | null }>
 const updateUser = client.models.User.update as unknown as (
   input: { id: string } & Partial<Pick<Profile, 'linkedSection' | 'linkedFacultyName'>>,

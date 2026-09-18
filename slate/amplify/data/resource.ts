@@ -8,7 +8,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
  * brief means any signed-in user, not a fully public/anonymous visitor.
  */
 const schema = a.schema({
-  Role: a.enum(['FACULTY', 'STUDENT']),
+  Role: a.enum(['STUDENT', 'FACULTY', 'ADMIN']),
   RequestStatus: a.enum(['PROPOSED', 'CONFIRMED']),
   ChangeType: a.enum(['SCHEDULED', 'CANCELLED']),
 

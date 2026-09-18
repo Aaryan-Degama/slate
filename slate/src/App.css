@@ -1,34 +1,57 @@
 .app-shell {
-  max-width: 1100px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px 20px 60px;
+  padding: 0 20px 60px;
   text-align: left;
 }
 
 .tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 32px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
+}
+
+.app-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-h);
+  margin-right: 12px;
 }
 
 .tabs button {
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 6px;
-  padding: 8px 14px;
+  padding: 7px 12px;
   cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.tabs button:hover {
+  background: var(--bg-subtle);
 }
 
 .tabs button.active {
   background: var(--accent-bg);
-  border-color: var(--accent);
   color: var(--accent);
+  font-weight: 600;
 }
 
 .tabs .sign-out {
   margin-left: auto;
+  color: var(--text);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
 }
 
 .new-request,
@@ -36,7 +59,69 @@
 .identity-link {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+
+.subtitle {
+  color: var(--text);
+  font-size: 14px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+input,
+select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--bg-subtle);
+}
+
+button[type='submit'],
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+button[type='submit']:hover,
+.primary:hover {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .section-row {
@@ -50,34 +135,39 @@
 
 fieldset {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px 16px;
+  border-radius: 8px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-fieldset label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
+fieldset legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 0 4px;
 }
 
 .days {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .day-toggle {
   flex-direction: row !important;
   align-items: center;
-  gap: 4px !important;
+  gap: 5px !important;
+  font-weight: 400 !important;
 }
 
 .error {
-  color: #e05252;
+  color: var(--danger);
+  background: var(--danger-bg);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
 }
 
 .option-list {
@@ -90,5 +180,53 @@ fieldset label {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
+}
+
+.free-slot-picker button {
+  border-color: var(--free);
+  color: var(--free);
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.stat-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-tile .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.stat-tile .label {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+table.admin-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+table.admin-table th,
+table.admin-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+table.admin-table th {
+  color: var(--text);
+  font-weight: 600;
 }
