@@ -31,17 +31,21 @@ At IIIT Allahabad, when a professor needs to schedule a makeup class, a doubt se
 
 ## 2. What we are building
 
-**One tool, three screens.** Input: which sections need to attend. Output: the actual free slots, with a room suggested, and — if there genuinely isn't one — an honest explanation of what's blocking it.
+> **Revision note (Day 2):** the scope below was expanded from the original 3-screen, faculty-only plan after building the first version and testing it against real data. The original plan (faculty picks sections → sees free slots → emails CRs) is preserved as the core scheduling flow. Added: a student dashboard and a teacher dashboard, both read-only views of the same ingested timetable data with no new data entry beyond a one-time identity link; and the confirm step now updates the visible timetable grid directly instead of sending an SES email. See git history around this revision for what changed and why — the reasoning (especially around not fabricating per-student elective data) is preserved in `NOTES.md` (untracked, local).
 
-### The three screens — this is the entire scope
+**Five screens**, all reading from the same ingested timetable data. Two are the original scheduling flow; two are read-only dashboards; the fifth is a lightweight one-time identity link.
 
-1. **New Request** — select the program/branch/section combinations that must attend, plus optional constraints (earliest/latest time, which days are allowed, how long the slot needs to be).
-2. **Proposed Slots** — ranked list of common free slots with the reasoning shown ("free for all 3 sections, mid-morning, no lunch clash") and a suggested room. If no slot satisfies every constraint, show which section is the actual blocker instead of just failing silently.
-3. **Confirm & Notify** — requester picks the winning slot; one SES email goes out to the affected sections' CRs. One-directional. Not a chat, not a poll — the decision is already made, this just tells people.
+### The screens
+
+1. **New Request** (faculty) — select the program/branch/section combinations that must attend, plus optional constraints (earliest/latest time, which days are allowed, how long the slot needs to be).
+2. **Proposed Slots** (faculty) — a visual weekly grid (days × real class hours) with genuinely free slots highlighted green, plus the same reasoning as before ("free for all 3 sections, mid-morning, no lunch clash") and a suggested room. If no slot satisfies every constraint, show which section is the actual blocker instead of just failing silently.
+3. **Confirm** (faculty) — requester picks the winning slot. No email. Instead, this writes a `ScheduleChange` record that the affected sections'/faculty's grid views pick up and highlight — green for newly scheduled, a distinct color for cancelled. One-directional. Not a chat, not a poll — the decision is already made, this just makes it visible to whoever looks at their timetable.
+4. **Student Dashboard** — after a one-time identity link (self-select their real section from the ingested list — see §4a), shows their own weekly timetable as a grid, generated entirely from ingested `TimetableSlot` data plus any `ScheduleChange` highlights for their section. Also lets them check which slots are free for their own class (read-only — a student never schedules anything).
+5. **Teacher Dashboard** — after a one-time identity link (self-select their real name from the ingested faculty list), shows their own teaching timetable as a grid, generated from ingested data (which sections they teach, when, where) plus `ScheduleChange` highlights.
 
 ### Non-goals — do NOT build these
 
-Any voting or back-and-forth confirmation among students — the requester decides, the tool informs. Editable or crowdsourced timetable data — it's read-only, ingested from official sources. Multi-day/recurring requests (a single one-off slot only). A general-purpose meeting scheduler beyond this specific timetable shape. Any form of user-created or user-joined group — sections are automatic from enrollment data. Chat/messaging. A student-facing "my semester" planner (this was cut — it's a crowded category with no differentiation; see §0). A native mobile app. Multi-institution support — IIITA is hardcoded. Anything not in the three screens above.
+Any voting or back-and-forth confirmation among students — the requester decides, the tool informs. Editable or crowdsourced timetable *course* data — it's read-only, ingested from official sources; the only self-service input anywhere in the product is the one-time identity link in §4a, which points at existing real data rather than creating new schedule data. Multi-day/recurring requests (a single one-off slot only). A general-purpose meeting scheduler beyond this specific timetable shape. Any form of user-created or user-joined group — sections are automatic from enrollment data. Chat/messaging. A native mobile app. Multi-institution support — IIITA is hardcoded. Per-student elective-level precision — electives are handled as conservative busy blocks per the whole basket, not tracked per student (no data source exists for that; see `NOTES.md` §21). Anything not in the five screens above.
 
 If a feature isn't visible in the 3-minute video, it is wasted time. Ask before adding anything.
 
@@ -57,12 +61,12 @@ Ship It track. Deployed, with a public URL, from day one.
 |---|---|---|
 | Frontend | React + Vite, TypeScript | Typed client from the Amplify Gen 2 schema |
 | Hosting | AWS Amplify Hosting | Public URL in minutes, CI from GitHub |
-| Auth | Amazon Cognito, IIITA email domain gate, `role: FACULTY \| STUDENT` custom attribute | The domain gate is the closed-community boundary. The role attribute gates exactly one action: who may hit Confirm & Notify. Anyone can view proposed slots; only faculty/CR can finalize one |
+| Auth | Amazon Cognito, IIITA email domain gate, `role: FACULTY \| STUDENT` custom attribute | The domain gate is the closed-community boundary. The role attribute gates exactly one action: who may hit Confirm. Anyone can view proposed slots and their own dashboard; only faculty/CR can finalize a slot |
 | API + DB | Amplify Gen 2 data (AppSync + DynamoDB) | Generated from a schema file, no hand-written CRUD |
 | Data ingestion | Amazon Textract on real AAA timetable PDFs → Amazon Bedrock to normalize inconsistent per-program formatting into one schema → DynamoDB | One-time-per-semester batch job we run, not a live user flow. Real AWS work: the PDFs are genuinely unstructured and inconsistent across programs |
 | Slot-finding logic | Custom Lambda — interval intersection across all requested sections' timetables, filtered by the request's constraints, ranked by simple heuristics, with a room-availability pass and a blocking-section explanation when no slot satisfies everything | This is the entire product. It needs every affected section's timetable at once — no chatbot can do this, because it doesn't have access to that data |
-| Authorization | Cedar | One real policy: only `role: FACULTY` may call Confirm & Notify. Small, but genuine — not decorative |
-| Notification | Amazon SES | The one-way email on confirm — this is what makes the tool actually useful, not just a proposal generator nobody acts on |
+| Authorization | Cedar | One real policy: only `role: FACULTY` may call Confirm. Small, but genuine — not decorative |
+| Notification | ~~Amazon SES~~ dropped | Replaced by the grid-highlight mechanism (§2, §4a) — confirming a slot writes a `ScheduleChange` row that the affected student/teacher dashboards render as a green (scheduled) or distinct (cancelled) highlight on their own timetable grid, instead of an email. Decided Day 2 once the product had dashboards worth checking. |
 | Logs | CloudWatch | One real Textract/Bedrock ingestion log line, and one Lambda invocation log, shown on camera |
 
 ### The honest call on ingestion — say this in the writeup, don't hide it
@@ -78,10 +82,15 @@ No OpenSearch, RDS, NAT Gateway, ECS/Fargate, EKS, or EC2. Everything scales to 
 ## 4. Data model
 
 ```
-User         userId, email, role: FACULTY|STUDENT
+User         userId, email, role: FACULTY|STUDENT,
+              linkedSection: { program, branch, section } | null   (students)
+              linkedFacultyName: string | null                     (faculty)
 
 TimetableSlot slotId, program, branch, section, semester,
-              day, startTime, endTime, courseId, room
+              day, startTime, endTime, courseId, room,
+              faculty  (added Day 2 — enables the teacher dashboard;
+                        backfilled from the real course-legend data in
+                        the same source spreadsheet, not fabricated)
 
 SlotRequest   requestId, requesterId, status: PROPOSED|CONFIRMED,
               sections: [{ program, branch, section }],
@@ -90,7 +99,23 @@ SlotRequest   requestId, requesterId, status: PROPOSED|CONFIRMED,
 ProposedSlot  requestId, day, startTime, endTime, room,
               score, reason,
               blockingSection (present only when no slot satisfies all constraints)
+
+ScheduleChange   (added Day 2, replaces the SES email)
+              changeId, relatedRequestId,
+              program, branch, section,
+              day, startTime, endTime, courseId, room,
+              changeType: SCHEDULED|CANCELLED,
+              createdAt
 ```
+
+### 4a. Identity link (student/teacher dashboards)
+
+We have no source for automatic roll-number → section or name → faculty-identity resolution (checked — not publicly available, and not worth the privacy exposure of ingesting a full roster into a public repo even if it were). Until/unless that data becomes available, a student or faculty member links their own login to their own real, already-ingested identity **once**, on first use of their dashboard:
+
+- **Student:** picks their own `{program, branch, section}` from a dropdown of real values already present in `TimetableSlot` — not typed free text, not new schedule data, just pointing at something that already exists.
+- **Faculty:** picks their own name from a dropdown of real distinct `faculty` values already present in `TimetableSlot`.
+
+This is the one explicitly-allowed exception to the "no user-entered data" rule in §2's non-goals — it's an identity pointer, not schedule data. If a real roll-number file becomes available, this step is replaced with automatic lookup and nothing else in the data model changes.
 
 ---
 
@@ -131,7 +156,7 @@ No ML — correct, explainable interval intersection and a simple bottleneck che
 **Day 3**
 - Room-suggestion pass and the blocking-section explanation.
 - `New Request` and `Proposed Slots` screens wired to the Lambda.
-- `Confirm & Notify` screen, Cedar role gate, SES email wired and tested for real.
+- `Confirm` screen, Cedar role gate, `ScheduleChange` write wired and reflected live on the Student/Teacher dashboard grids, tested for real.
 
 **Day 4**
 - UI polish — Best UI is a separate ₹1,00,000 prize and most teams ship unstyled forms.
@@ -145,7 +170,7 @@ No ML — correct, explainable interval intersection and a simple bottleneck che
 1. **0:00–0:25** The problem, concretely: a professor needing a makeup class, a WhatsApp poll to three CRs, two days of back-and-forth to find one hour.
 2. **0:25–0:55** New Request — pick the three sections, set constraints. Show the real Textract/Bedrock ingestion log line — this is the "must show AWS in the video" requirement, do not skip it.
 3. **0:55–1:35** Proposed Slots — the ranked result with reasoning and a suggested room, appearing in seconds instead of two days. Then show the no-common-slot case and the blocking-section explanation — this is the moment that proves it's real logic, not a lookup table.
-4. **1:35–2:05** Confirm & Notify — pick the slot, the SES email goes out, show it landing in an inbox.
+4. **1:35–2:05** Confirm — pick the slot, then cut to a student's (or teacher's) dashboard showing the same slot appear as a live green "scheduled" highlight on their own timetable grid.
 5. **2:05–2:35** Architecture diagram and the live URL.
 6. **2:35–3:00** What we learned, specifically: what Textract/Bedrock ingestion accuracy actually looked like on real institutional timetable PDFs, and why the scope stayed this narrow.
 
