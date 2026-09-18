@@ -129,16 +129,15 @@
   color: var(--text-h);
 }
 
-.section-badge {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.75);
-  font-weight: 700;
-  font-size: 10.5px;
-  letter-spacing: 0.2px;
-  padding: 0px 6px;
-  border-radius: 99px;
-  line-height: 1.5;
-  border: 1px solid currentColor;
+.section-dot {
+  margin: 0 3px;
+  opacity: 0.45;
+  font-weight: 400;
+}
+
+.section-label {
+  font-weight: 500;
+  opacity: 0.75;
 }
 
 .meta.room {

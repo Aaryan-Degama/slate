@@ -100,12 +100,13 @@ function GridCell({
                 <span className="course-line-left">
                   <span className="course" style={{ color: color.text }}>
                     {b.courseId}
+                    {b.section && (
+                      <>
+                        <span className="section-dot">·</span>
+                        <span className="section-label">{b.section}</span>
+                      </>
+                    )}
                   </span>
-                  {b.section && (
-                    <span className="section-badge" style={{ color: color.accent }}>
-                      {b.section}
-                    </span>
-                  )}
                 </span>
                 {b.room && <span className="meta room">{b.room}</span>}
               </div>
