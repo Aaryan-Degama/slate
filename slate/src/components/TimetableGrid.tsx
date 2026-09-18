@@ -36,19 +36,24 @@ function layoutDay(row: Cell[]): { items: Placed[]; lanes: number } {
     }
   })
 
-  const sorted = [...spans.values()].sort((a, b) => a.start - b.start || b.end - a.end)
-  const laneEnds: number[] = []
+  // Section order first (A above B above C), then time; each goes in the
+  // topmost line that's free for all of its hours.
+  const section = (s: Span) => (s.kind === 'busy' ? s.entry.section ?? '' : '')
+  const sorted = [...spans.values()].sort(
+    (a, b) => section(a).localeCompare(section(b)) || a.start - b.start || b.end - a.end,
+  )
+  const lanes: Set<number>[] = []
   const items = sorted.map((s) => {
-    let lane = laneEnds.findIndex((end) => end < s.start)
+    const hours = Array.from({ length: s.end - s.start + 1 }, (_, i) => s.start + i)
+    let lane = lanes.findIndex((used) => hours.every((h) => !used.has(h)))
     if (lane === -1) {
-      lane = laneEnds.length
-      laneEnds.push(s.end)
-    } else {
-      laneEnds[lane] = s.end
+      lane = lanes.length
+      lanes.push(new Set())
     }
+    hours.forEach((h) => lanes[lane].add(h))
     return { ...s, lane }
   })
-  return { items, lanes: Math.max(laneEnds.length, 1) }
+  return { items, lanes: Math.max(lanes.length, 1) }
 }
 
 export default function TimetableGrid({
