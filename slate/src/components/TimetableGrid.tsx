@@ -3,6 +3,22 @@ import { courseColor } from '../lib/courseColor'
 import { courseFullName } from '../lib/courseNames'
 import './TimetableGrid.css'
 
+/** How many consecutive HOURS columns (starting at hi) a busy entry
+ * actually covers, given its real start/end time -- so a 2-hour class
+ * renders as one wide cell instead of repeating in each hour column it
+ * touches. Stops at any gap in HOURS (e.g. lunch), which shouldn't
+ * happen in real data but guards against a bad merge producing one. */
+function spanCount(entry: BusyEntry, hi: number): number {
+  let span = 0
+  for (let j = hi; j < HOURS.length; j++) {
+    const hour = HOURS[j]
+    if (hour.start < entry.startTime || hour.end > entry.endTime) break
+    if (j > hi && hour.start !== HOURS[j - 1].end) break
+    span++
+  }
+  return Math.max(span, 1)
+}
+
 export default function TimetableGrid({
   grid,
   freeIsHighlighted = false,
@@ -32,23 +48,34 @@ export default function TimetableGrid({
         </tr>
       </thead>
       <tbody>
-        {DAYS.map((day, di) => (
-          <tr key={day}>
-            <th className="hour-label">{day}</th>
-            {HOURS.map((hour, hi) => {
-              const cell = grid[di][hi]
-              return (
-                <GridCell
-                  key={hour.start}
-                  cell={cell}
-                  freeIsHighlighted={freeIsHighlighted}
-                  onBusyClick={onBusyClick}
-                  onEmptyClick={onEmptyClick}
-                />
-              )
-            })}
-          </tr>
-        ))}
+        {DAYS.map((day, di) => {
+          const cells: React.ReactNode[] = []
+          let hi = 0
+          while (hi < HOURS.length) {
+            const cell = grid[di][hi]
+            const colSpan =
+              cell.busy.length > 0
+                ? Math.max(...cell.busy.map((b) => spanCount(b, hi)))
+                : 1
+            cells.push(
+              <GridCell
+                key={HOURS[hi].start}
+                cell={cell}
+                colSpan={colSpan}
+                freeIsHighlighted={freeIsHighlighted}
+                onBusyClick={onBusyClick}
+                onEmptyClick={onEmptyClick}
+              />,
+            )
+            hi += colSpan
+          }
+          return (
+            <tr key={day}>
+              <th className="hour-label">{day}</th>
+              {cells}
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
@@ -56,11 +83,13 @@ export default function TimetableGrid({
 
 function GridCell({
   cell,
+  colSpan,
   freeIsHighlighted,
   onBusyClick,
   onEmptyClick,
 }: {
   cell: Cell
+  colSpan: number
   freeIsHighlighted: boolean
   onBusyClick?: (entry: BusyEntry) => void
   onEmptyClick?: (day: string, start: string, end: string) => void
@@ -70,7 +99,7 @@ function GridCell({
   if (cell.change) {
     const cls = cell.change.changeType === 'SCHEDULED' ? 'change-scheduled' : 'change-cancelled'
     return (
-      <td className={`grid-cell ${cls}`}>
+      <td className={`grid-cell ${cls}`} colSpan={colSpan}>
         <span className="course">{cell.change.courseId}</span>
         <span className="tag">
           {cell.change.changeType === 'SCHEDULED' ? 'Newly scheduled' : 'Cancelled'}
@@ -81,7 +110,7 @@ function GridCell({
 
   if (cell.busy.length > 0) {
     return (
-      <td className="grid-cell busy">
+      <td className="grid-cell busy" colSpan={colSpan}>
         {cell.busy.map((b, i) => {
           const color = courseColor(b.courseId)
           const fullName = courseFullName(b.courseId)
@@ -120,6 +149,7 @@ function GridCell({
   return (
     <td
       className={`grid-cell ${freeIsHighlighted ? 'free' : ''}${editable ? ' editable-empty' : ''}`}
+      colSpan={colSpan}
       onClick={onEmptyClick ? () => onEmptyClick(cell.day, cell.start, cell.end) : undefined}
     >
       {editable && <span className="add-hint">+</span>}
