@@ -5,19 +5,16 @@ import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, freeAcrossAll, type BusyEntry, type ChangeEntry, type Cell } from './lib/grid'
 import type { Profile } from './lib/useMyProfile'
 import { resolveSectionFromEmail } from './lib/rollLookup'
+import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
 type SectionRef = { program: string; branch: string; section: string; semester: number }
 
 type TimetableSlotRow = BusyEntry & { program: string; branch: string; section: string; semester: number }
-const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => Promise<{
-  data: TimetableSlotRow[]
-}>
+const listTimetableSlots = () => listAll<TimetableSlotRow>(client.models.TimetableSlot.list)
 type ScheduleChangeRow = ChangeEntry & { program: string; branch: string; section: string }
-const listScheduleChanges = client.models.ScheduleChange.list as unknown as () => Promise<{
-  data: ScheduleChangeRow[]
-}>
+const listScheduleChanges = () => listAll<ScheduleChangeRow>(client.models.ScheduleChange.list)
 
 export default function StudentDashboard({
   profile,

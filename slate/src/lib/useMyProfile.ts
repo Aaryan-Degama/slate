@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import { fetchUserAttributes } from 'aws-amplify/auth'
 import type { Schema } from '../../amplify/data/resource'
+import { listAll } from './listAll'
 
 const client = generateClient<Schema>()
 
@@ -27,7 +28,7 @@ function normalize(raw: RawProfile | null): Profile | null {
   return { ...raw, linkedSection: linkedSection as Profile['linkedSection'] }
 }
 
-const listMyUsers = client.models.User.list as unknown as () => Promise<{ data: RawProfile[] }>
+const listMyUsers = () => listAll<RawProfile>(client.models.User.list)
 const createUser = client.models.User.create as unknown as (input: {
   email: string
   role: 'STUDENT' | 'FACULTY' | 'ADMIN'

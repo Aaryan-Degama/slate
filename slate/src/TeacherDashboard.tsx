@@ -4,13 +4,12 @@ import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry, type Cell } from './lib/grid'
 import type { Profile } from './lib/useMyProfile'
+import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
 type TimetableSlotRow = BusyEntry & { faculty?: string | null }
-const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => Promise<{
-  data: TimetableSlotRow[]
-}>
+const listTimetableSlots = () => listAll<TimetableSlotRow>(client.models.TimetableSlot.list)
 
 export default function TeacherDashboard({
   profile,

@@ -4,6 +4,7 @@ import { uploadData } from 'aws-amplify/storage'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry } from './lib/grid'
+import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
@@ -55,10 +56,6 @@ type SlotRow = {
 const parseTimetable = (client.queries as unknown as {
   parseTimetable: (a: { key: string }) => Promise<{ data: unknown; errors?: { message: string }[] }>
 }).parseTimetable
-const listSlots = client.models.TimetableSlot.list as unknown as (o?: {
-  limit?: number
-  nextToken?: string | null
-}) => Promise<{ data: SlotRow[]; nextToken?: string | null }>
 const createSlot = client.models.TimetableSlot.create as unknown as (
   input: Omit<SlotRow, 'id'>,
 ) => Promise<{ errors?: { message: string }[] }>
@@ -68,17 +65,6 @@ const updateSlot = client.models.TimetableSlot.update as unknown as (
 const deleteSlot = client.models.TimetableSlot.delete as unknown as (
   input: { id: string },
 ) => Promise<{ errors?: { message: string }[] }>
-
-async function listAllSlots(): Promise<SlotRow[]> {
-  const all: SlotRow[] = []
-  let nextToken: string | null | undefined = null
-  do {
-    const res: { data: SlotRow[]; nextToken?: string | null } = await listSlots({ limit: 1000, nextToken })
-    all.push(...res.data)
-    nextToken = res.nextToken
-  } while (nextToken)
-  return all
-}
 
 const rowKey = (r: { day: string; courseId: string; sessionType?: string | null; section: string; startTime: string }) =>
   `${r.day}|${r.courseId}|${r.sessionType ?? ''}|${r.section}|${r.startTime}`
@@ -166,7 +152,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
     if (!selected || !batch) return
     setError('')
     try {
-      const all = await listAllSlots()
+      const { data: all } = await listAll<SlotRow>(client.models.TimetableSlot.list)
       const existing = all.filter(
         (r) => r.program === batch.program && r.branch === batch.branch && r.semester === batch.semester,
       )

@@ -6,6 +6,7 @@
 // and the range lookup against real data.
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../../amplify/data/resource'
+import { listAll } from './listAll'
 
 const client = generateClient<Schema>()
 
@@ -21,9 +22,7 @@ type RollRangeRow = {
   maxRoll: number
   section: string
 }
-const listRollRanges = client.models.RollRange.list as unknown as () => Promise<{
-  data: RollRangeRow[]
-}>
+const listRollRanges = () => listAll<RollRangeRow>(client.models.RollRange.list)
 
 export async function resolveSectionFromEmail(
   email: string,

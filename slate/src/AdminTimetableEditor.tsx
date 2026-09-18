@@ -3,6 +3,7 @@ import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, DAYS, HOURS, type BusyEntry, type Cell } from './lib/grid'
+import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
@@ -20,7 +21,7 @@ type SlotRow = {
   faculty?: string | null
   sessionType?: string | null
 }
-const listSlots = client.models.TimetableSlot.list as unknown as () => Promise<{ data: SlotRow[] }>
+const listSlots = () => listAll<SlotRow>(client.models.TimetableSlot.list)
 const createSlot = client.models.TimetableSlot.create as unknown as (
   input: Omit<SlotRow, 'id'>,
 ) => Promise<{ data: SlotRow | null; errors?: { message: string }[] }>

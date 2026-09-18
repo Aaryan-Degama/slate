@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
+import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
@@ -12,9 +13,7 @@ type TimetableSlotRow = {
   courseId: string
   faculty?: string | null
 }
-const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => Promise<{
-  data: TimetableSlotRow[]
-}>
+const listTimetableSlots = () => listAll<TimetableSlotRow>(client.models.TimetableSlot.list)
 
 type RollRangeRow = {
   admissionYear: string
@@ -25,9 +24,7 @@ type RollRangeRow = {
   maxRoll: number
   section: string
 }
-const listRollRanges = client.models.RollRange.list as unknown as () => Promise<{
-  data: RollRangeRow[]
-}>
+const listRollRanges = () => listAll<RollRangeRow>(client.models.RollRange.list)
 const createRollRange = client.models.RollRange.create as unknown as (
   input: RollRangeRow,
 ) => Promise<{ data: RollRangeRow | null; errors?: { message: string }[] }>
@@ -138,16 +135,15 @@ export default function AdminDashboard() {
     <div className="dashboard">
       <h1>Ingested Data</h1>
       <p className="subtitle">
-        Real timetable data currently loaded into the system. New timetable data is
-        hand-ingested from official spreadsheets/PDFs directly into the database; roll-number
-        sub-section ranges (below) can be uploaded here.
+        Real timetable data currently loaded into the system. Add or update a batch from the
+        Upload Timetable tab; roll-number sub-section ranges (below) can be uploaded here.
       </p>
 
       {gaps.length > 0 && (
         <div className="card gap-warning" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <h2>Missing sub-section roll ranges</h2>
           <p className="subtitle">
-            These courses split section {"{parent}"} into sub-sections in the real timetable, but
+            These batches split a section into sub-sections in the real timetable, but
             there's no roll-range data saying which students are in which half — those students'
             dashboards can't show these classes yet.
           </p>
