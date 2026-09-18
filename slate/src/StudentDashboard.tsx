@@ -9,7 +9,7 @@ import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
 
-type SectionRef = { program: string; branch: string; section: string; semester: number }
+type SectionRef = { program: string; branch: string; section: string; semester: number; subSection?: string }
 
 type TimetableSlotRow = BusyEntry & { program: string; branch: string; section: string; semester: number }
 const listTimetableSlots = () => listAll<TimetableSlotRow>(client.models.TimetableSlot.list)
@@ -63,7 +63,7 @@ export default function StudentDashboard({
     )
   }
 
-  return <MyTimetable section={profile.linkedSection as SectionRef} />
+  return <MyTimetable section={profile.linkedSection as SectionRef} email={profile.email} />
 }
 
 function SectionPicker({ onPick }: { onPick: (section: SectionRef) => void }) {
@@ -113,32 +113,48 @@ function SectionPicker({ onPick }: { onPick: (section: SectionRef) => void }) {
   )
 }
 
-function MyTimetable({ section }: { section: SectionRef }) {
+function MyTimetable({ section, email }: { section: SectionRef; email: string }) {
   const [grid, setGrid] = useState<Cell[][] | null>(null)
   const [freeGrid, setFreeGrid] = useState<Cell[][] | null>(null)
   const [hasData, setHasData] = useState(true)
   const [showFree, setShowFree] = useState(false)
+  const [groups, setGroups] = useState<{ section: string; subSection?: string; unknownSplit: string[] }>({
+    section: section.section,
+    unknownSplit: [],
+  })
 
   useEffect(() => {
-    Promise.all([listTimetableSlots(), listScheduleChanges()]).then(([slots, changes]) => {
-      const mySlots = slots.data.filter(
-        (r) =>
-          r.program === section.program &&
-          r.branch === section.branch &&
-          r.section === section.section &&
-          r.semester === section.semester,
-      )
-      const myChanges = changes.data.filter(
-        (r) =>
-          r.program === section.program &&
-          r.branch === section.branch &&
-          r.section === section.section,
-      )
-      setHasData(mySlots.length > 0)
-      setGrid(buildGrid(mySlots, myChanges))
-      setFreeGrid(freeAcrossAll([mySlots]))
-    })
-  }, [section])
+    // The linked profile may predate a B1/B2 upload, so re-resolve the
+    // sub-section on every load. A profile linked by picking "B1" from
+    // the list counts as section B + sub-section B1.
+    const picked = /^[A-Z]\d$/i.test(section.section)
+      ? { section: section.section[0], subSection: section.section }
+      : { section: section.section, subSection: section.subSection }
+    Promise.all([listTimetableSlots(), listScheduleChanges(), resolveSectionFromEmail(email)]).then(
+      ([slots, changes, resolved]) => {
+        const subSection =
+          picked.subSection ??
+          (resolved && resolved.section === picked.section && resolved.semester === section.semester
+            ? resolved.subSection
+            : undefined)
+        const mine = (s: string) => s === picked.section || (subSection !== undefined && s === subSection)
+        const batch = slots.data.filter(
+          (r) => r.program === section.program && r.branch === section.branch && r.semester === section.semester,
+        )
+        const mySlots = batch.filter((r) => mine(r.section))
+        const unknownSplit = subSection
+          ? []
+          : [...new Set(batch.map((r) => r.section).filter((s) => s.length === 2 && s[0] === picked.section))].sort()
+        const myChanges = changes.data.filter(
+          (r) => r.program === section.program && r.branch === section.branch && mine(r.section),
+        )
+        setGroups({ section: picked.section, subSection, unknownSplit })
+        setHasData(mySlots.length > 0)
+        setGrid(buildGrid(mySlots, myChanges))
+        setFreeGrid(freeAcrossAll([mySlots]))
+      },
+    )
+  }, [section, email])
 
   if (!grid) return <p>Loading your timetable...</p>
 
@@ -146,8 +162,15 @@ function MyTimetable({ section }: { section: SectionRef }) {
     <div className="dashboard">
       <h1>
         My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
-        {section.section}
+        {groups.subSection ?? groups.section}
       </h1>
+      {groups.unknownSplit.length > 0 && (
+        <p className="error">
+          Section {groups.section} splits into {groups.unknownSplit.join('/')} for some classes, and we don't know
+          your group yet, so those classes aren't shown. Your admin needs to upload the {groups.unknownSplit.join('/')}{' '}
+          list.
+        </p>
+      )}
       {!hasData && (
         <p className="error">
           No timetable has been ingested for this section yet — the identity link worked

@@ -1,9 +1,6 @@
-// Roll-number -> section resolution (CLAUDE.md §4a).
-//
-// Ranges live in the real RollRange table (an admin-managed dataset --
-// hand-entered for now, eventually filled by an OCR-over-sheets pipeline),
-// not hardcoded here. This file only does the email -> roll-number parsing
-// and the range lookup against real data.
+// Roll-number -> section resolution (CLAUDE.md §4a), from admin-provided
+// data only: the per-student StudentSection list first, then RollRange
+// ranges as a fallback.
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../../amplify/data/resource'
 import { listAll } from './listAll'
@@ -11,7 +8,16 @@ import { listAll } from './listAll'
 const client = generateClient<Schema>()
 
 // IIITA emails look like iit<admissionYear><rollNumber>@iiita.ac.in.
-const EMAIL_RE = /^iit(\d{4})(\d+)@iiita\.ac\.in$/i
+const EMAIL_RE = /^[a-z]{2,4}(\d{4})(\d+)@iiita\.ac\.in$/i
+
+export type ResolvedSection = {
+  program: string
+  branch: string
+  semester: number
+  section: string
+  /** B1/B2-style group, when the batch splits and it's known. */
+  subSection?: string
+}
 
 type RollRangeRow = {
   admissionYear: string
@@ -22,25 +28,51 @@ type RollRangeRow = {
   maxRoll: number
   section: string
 }
+type StudentSectionRow = {
+  admissionYear: string
+  rollNumber: number
+  program: string
+  branch: string
+  semester: number
+  section: string
+  subSection?: string | null
+}
 const listRollRanges = () => listAll<RollRangeRow>(client.models.RollRange.list)
+const listStudentSections = () => listAll<StudentSectionRow>(client.models.StudentSection.list)
 
-export async function resolveSectionFromEmail(
-  email: string,
-): Promise<{ program: string; branch: string; section: string; semester: number } | null> {
+const isSub = (s: string) => /^[A-Z]\d$/i.test(s)
+
+export async function resolveSectionFromEmail(email: string): Promise<ResolvedSection | null> {
   const match = email.match(EMAIL_RE)
   if (!match) return null
   const [, admissionYear, rollStr] = match
   const roll = parseInt(rollStr, 10)
 
+  const { data: students } = await listStudentSections()
+  const mine = students
+    .filter((s) => s.admissionYear === admissionYear && s.rollNumber === roll)
+    .sort((a, b) => b.semester - a.semester)[0]
+  if (mine) {
+    return {
+      program: mine.program,
+      branch: mine.branch,
+      semester: mine.semester,
+      section: mine.section,
+      subSection: mine.subSection ?? undefined,
+    }
+  }
+
   const { data: ranges } = await listRollRanges()
-  const rule = ranges.find(
-    (r) => r.admissionYear === admissionYear && roll >= r.minRoll && roll <= r.maxRoll,
-  )
-  if (!rule) return null
+  const hits = ranges.filter((r) => r.admissionYear === admissionYear && roll >= r.minRoll && roll <= r.maxRoll)
+  const whole = hits.find((r) => !isSub(r.section))
+  const sub = hits.find((r) => isSub(r.section))
+  const base = whole ?? sub
+  if (!base) return null
   return {
-    program: rule.program,
-    branch: rule.branch,
-    section: rule.section,
-    semester: rule.semester,
+    program: base.program,
+    branch: base.branch,
+    semester: base.semester,
+    section: whole ? whole.section : sub!.section[0],
+    subSection: sub?.section,
   }
 }

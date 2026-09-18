@@ -5,6 +5,7 @@ import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry } from './lib/grid'
 import { listAll } from './lib/listAll'
+import StudentImport, { type TableSheet } from './StudentImport'
 
 const client = generateClient<Schema>()
 
@@ -27,14 +28,16 @@ type Issue = { type: string; detail?: string; course?: string; section?: string;
 type SheetResult =
   | {
       sheet: string
+      kind: 'timetable'
       title: string
       batch: { program: string | null; branch: string | null; semester: number | null }
       rows: ParsedRow[]
       skipped: { coord: string; day: string; text: string; reason: string }[]
       issues: Issue[]
     }
-  | { sheet: string; error: string }
-type OkSheet = Extract<SheetResult, { rows: ParsedRow[] }>
+  | TableSheet
+  | { sheet: string; kind: 'error'; error: string }
+type OkSheet = Extract<SheetResult, { kind: 'timetable' }>
 
 type SlotRow = {
   id: string
@@ -111,6 +114,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [fileName, setFileName] = useState('')
   const [sheets, setSheets] = useState<SheetResult[]>([])
   const [selected, setSelected] = useState<OkSheet | null>(null)
+  const [selectedTable, setSelectedTable] = useState<TableSheet | null>(null)
   const [batch, setBatch] = useState<Batch | null>(null)
   const [diff, setDiff] = useState<Diff | null>(null)
   const [removeMissing, setRemoveMissing] = useState(false)
@@ -119,10 +123,11 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const handleFile = async (file: File) => {
     setError('')
     setSelected(null)
+    setSelectedTable(null)
     setDiff(null)
     setFileName(file.name)
     try {
-      if (!/\.xlsx$/i.test(file.name)) throw new Error('Only .xlsx files are supported for now.')
+      if (!/\.(xlsx|csv)$/i.test(file.name)) throw new Error('Upload an .xlsx or .csv file.')
       setStatus('uploading')
       const key = `timetable-uploads/${Date.now()}-${file.name.replace(/[^\w.-]+/g, '_')}`
       await uploadData({ path: key, data: file }).result
@@ -141,6 +146,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   }
 
   const pickSheet = async (s: OkSheet) => {
+    setSelectedTable(null)
     setSelected(s)
     setDiff(null)
     setRemoveMissing(false)
@@ -216,17 +222,17 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="dashboard">
-      <h1>Upload Timetable</h1>
+      <h1>Upload Data</h1>
       <p className="subtitle">
-        Upload the official timetable spreadsheet. It's stored in S3 and read by a Lambda that works out each class's
-        real hours from the sheet's merged cells, checks them against the course legend's L-T-P-S, and flags anything
-        it can't verify. Nothing is saved until you review and apply it.
+        Upload a timetable spreadsheet or a student list (sections, or a B1/B2 split). The file is stored in S3 and a
+        Lambda works out what each sheet is: timetables are checked against the course legend's L-T-P-S, and student
+        lists get their columns matched for you to confirm. Nothing is saved until you review and apply it.
       </p>
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <input
           type="file"
-          accept=".xlsx"
+          accept=".xlsx,.csv"
           disabled={status === 'uploading' || status === 'parsing' || status === 'applying'}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
@@ -240,9 +246,21 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
           <h2>Sheets in {fileName}</h2>
           <div className="option-list">
             {sheets.map((s) =>
-              'error' in s ? (
+              s.kind === 'error' ? (
                 <button key={s.sheet} disabled title={s.error}>
                   {s.sheet} — couldn't read
+                </button>
+              ) : s.kind === 'table' ? (
+                <button
+                  key={s.sheet}
+                  className={selectedTable?.sheet === s.sheet ? 'active' : ''}
+                  disabled={s.rows.length === 0}
+                  onClick={() => {
+                    setSelected(null)
+                    setSelectedTable(s)
+                  }}
+                >
+                  {s.sheet} · {s.detected === 'students' ? 'student list' : 'unrecognised table'} · {s.rows.length} rows
                 </button>
               ) : (
                 <button
@@ -252,13 +270,15 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                   title={s.rows.length === 0 ? 'No classes in a format this reader understands yet' : undefined}
                   onClick={() => pickSheet(s)}
                 >
-                  {s.sheet} · {s.rows.length} classes{s.issues.length ? ` · ${s.issues.length} flagged` : ''}
+                  {s.sheet} · timetable · {s.rows.length} classes{s.issues.length ? ` · ${s.issues.length} flagged` : ''}
                 </button>
               ),
             )}
           </div>
         </>
       )}
+
+      {selectedTable && <StudentImport sheet={selectedTable} />}
 
       {selected && (
         <>

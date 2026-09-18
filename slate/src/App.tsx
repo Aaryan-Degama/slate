@@ -110,7 +110,7 @@ function App() {
                 },
                 {
                   key: 'upload',
-                  label: 'Upload Timetable',
+                  label: 'Upload Data',
                   active: adminTab === 'upload',
                   onClick: () => setAdminTab('upload'),
                 },

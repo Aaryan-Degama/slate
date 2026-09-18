@@ -25,6 +25,8 @@ type RollRangeRow = {
   section: string
 }
 const listRollRanges = () => listAll<RollRangeRow>(client.models.RollRange.list)
+type StudentSectionRow = { program: string; branch: string; semester: number; subSection?: string | null }
+const listStudentSections = () => listAll<StudentSectionRow>(client.models.StudentSection.list)
 const createRollRange = client.models.RollRange.create as unknown as (
   input: RollRangeRow,
 ) => Promise<{ data: RollRangeRow | null; errors?: { message: string }[] }>
@@ -53,18 +55,20 @@ type Gap = {
 export default function AdminDashboard() {
   const [rows, setRows] = useState<TimetableSlotRow[] | null>(null)
   const [rollRanges, setRollRanges] = useState<RollRangeRow[] | null>(null)
+  const [students, setStudents] = useState<StudentSectionRow[] | null>(null)
   const [uploadFor, setUploadFor] = useState<Gap | null>(null)
 
   const reload = () => {
     listTimetableSlots().then(({ data }) => setRows(data))
     listRollRanges().then(({ data }) => setRollRanges(data))
+    listStudentSections().then(({ data }) => setStudents(data))
   }
 
   useEffect(() => {
     reload()
   }, [])
 
-  if (!rows || !rollRanges) return <p>Loading...</p>
+  if (!rows || !rollRanges || !students) return <p>Loading...</p>
 
   const totalCourses = new Set(rows.map((r) => r.courseId)).size
   const totalFaculty = new Set(rows.map((r) => r.faculty).filter(Boolean)).size
@@ -118,11 +122,12 @@ export default function AdminDashboard() {
       const [program, branch, semesterStr] = batchKey.split('|')
       const semester = Number(semesterStr)
       for (const [parent, subs] of parents) {
-        const covered = new Set(
-          rollRanges
-            .filter((rr) => rr.program === program && rr.branch === branch && rr.semester === semester)
-            .map((rr) => rr.section),
-        )
+        const inBatch = (x: { program: string; branch: string; semester: number }) =>
+          x.program === program && x.branch === branch && x.semester === semester
+        const covered = new Set([
+          ...rollRanges.filter(inBatch).map((rr) => rr.section),
+          ...students.filter(inBatch).map((s) => s.subSection ?? ''),
+        ])
         const missing = [...subs].filter((s) => !covered.has(s))
         if (missing.length > 0) {
           gaps.push({ program, branch, semester, parent, subsections: missing.sort() })
@@ -136,7 +141,7 @@ export default function AdminDashboard() {
       <h1>Ingested Data</h1>
       <p className="subtitle">
         Real timetable data currently loaded into the system. Add or update a batch from the
-        Upload Timetable tab; roll-number sub-section ranges (below) can be uploaded here.
+        Upload Data tab (timetables and student lists); roll ranges can also be entered below.
       </p>
 
       {gaps.length > 0 && (
@@ -144,8 +149,8 @@ export default function AdminDashboard() {
           <h2>Missing sub-section roll ranges</h2>
           <p className="subtitle">
             These batches split a section into sub-sections in the real timetable, but
-            there's no roll-range data saying which students are in which half — those students'
-            dashboards can't show these classes yet.
+            nothing says which students are in which group, so those classes can't be shown to them yet.
+            Upload the student list with its B1/B2 column on the Upload Data tab, or enter roll ranges here.
           </p>
           {gaps.map((g) => (
             <div
@@ -158,7 +163,7 @@ export default function AdminDashboard() {
                 {g.subsections.join(', ')}
               </span>
               <button type="button" onClick={() => setUploadFor(g)}>
-                Upload roll ranges
+                Enter roll ranges
               </button>
             </div>
           ))}

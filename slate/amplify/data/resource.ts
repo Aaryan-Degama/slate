@@ -132,6 +132,24 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
 
+  // One row per student: which section (and B1/B2-style sub-section, if
+  // the batch splits) they belong to, from an admin-uploaded student
+  // list. Takes precedence over RollRange, which only fits clean
+  // contiguous ranges. Courses and faculty are NOT stored here -- they
+  // follow from the section's TimetableSlot rows.
+  // TODO: writes should be ADMIN-only via Cedar, same gap as TimetableSlot.
+  StudentSection: a
+    .model({
+      admissionYear: a.string().required(),
+      rollNumber: a.integer().required(),
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      section: a.string().required(),
+      subSection: a.string(),
+    })
+    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update', 'delete'])]),
+
   // Admin upload: parses a timetable file already uploaded to S3 and
   // returns proposed rows + validation issues per sheet (JSON string).
   // Read-only; the admin applies the result from the app.
