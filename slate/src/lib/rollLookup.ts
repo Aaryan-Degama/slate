@@ -32,7 +32,7 @@ const ROLL_RANGES: RangeRule[] = [
 
 export function resolveSectionFromEmail(
   email: string,
-): { program: string; branch: string; section: string } | null {
+): { program: string; branch: string; section: string; semester: number } | null {
   const match = email.match(EMAIL_RE)
   if (!match) return null
   const [, admissionYear, rollStr] = match
@@ -41,5 +41,10 @@ export function resolveSectionFromEmail(
     (r) => r.admissionYear === admissionYear && roll >= r.min && roll <= r.max,
   )
   if (!rule) return null
-  return { program: rule.program, branch: rule.branch, section: rule.section }
+  return {
+    program: rule.program,
+    branch: rule.branch,
+    section: rule.section,
+    semester: rule.semester,
+  }
 }

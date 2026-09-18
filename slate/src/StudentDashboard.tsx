@@ -3,12 +3,14 @@ import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, freeAcrossAll, type BusyEntry, type ChangeEntry, type Cell } from './lib/grid'
-import { useMyProfile } from './lib/useMyProfile'
+import type { Profile } from './lib/useMyProfile'
 import { resolveSectionFromEmail } from './lib/rollLookup'
 
 const client = generateClient<Schema>()
 
-type TimetableSlotRow = BusyEntry & { program: string; branch: string; section: string }
+type SectionRef = { program: string; branch: string; section: string; semester: number }
+
+type TimetableSlotRow = BusyEntry & { program: string; branch: string; section: string; semester: number }
 const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => Promise<{
   data: TimetableSlotRow[]
 }>
@@ -17,12 +19,17 @@ const listScheduleChanges = client.models.ScheduleChange.list as unknown as () =
   data: ScheduleChangeRow[]
 }>
 
-export default function StudentDashboard() {
-  const { profile, loading, linkSection } = useMyProfile()
-  const [autoResolving, setAutoResolving] = useState(true)
+export default function StudentDashboard({
+  profile,
+  linkSection,
+}: {
+  profile: Profile
+  linkSection: (section: SectionRef) => Promise<void>
+}) {
+  const [autoResolving, setAutoResolving] = useState(!profile.linkedSection)
 
   useEffect(() => {
-    if (!profile || profile.linkedSection) {
+    if (profile.linkedSection) {
       setAutoResolving(false)
       return
     }
@@ -34,37 +41,35 @@ export default function StudentDashboard() {
     } else {
       setAutoResolving(false)
     }
-  }, [profile])
+  }, [profile.email, profile.linkedSection])
 
-  if (loading || autoResolving) return <p>Loading...</p>
-  if (!profile) return <p>Could not load your profile.</p>
+  if (autoResolving) return <p>Loading...</p>
   if (!profile.linkedSection) return <SectionPicker onPick={linkSection} />
 
-  return <MyTimetable section={profile.linkedSection} />
+  return <MyTimetable section={profile.linkedSection as SectionRef} />
 }
 
-function SectionPicker({
-  onPick,
-}: {
-  onPick: (section: { program: string; branch: string; section: string }) => void
-}) {
-  const [options, setOptions] = useState<{ program: string; branch: string; section: string }[]>(
-    [],
-  )
+function SectionPicker({ onPick }: { onPick: (section: SectionRef) => void }) {
+  const [options, setOptions] = useState<SectionRef[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     listTimetableSlots().then(({ data }) => {
       const seen = new Set<string>()
-      const opts: typeof options = []
+      const opts: SectionRef[] = []
       for (const row of data) {
-        const key = `${row.program}|${row.branch}|${row.section}`
+        const key = `${row.program}|${row.branch}|${row.section}|${row.semester}`
         if (!seen.has(key)) {
           seen.add(key)
-          opts.push({ program: row.program, branch: row.branch, section: row.section })
+          opts.push({
+            program: row.program,
+            branch: row.branch,
+            section: row.section,
+            semester: row.semester,
+          })
         }
       }
-      opts.sort((a, b) => a.section.localeCompare(b.section))
+      opts.sort((a, b) => a.semester - b.semester || a.section.localeCompare(b.section))
       setOptions(opts)
       setLoading(false)
     })
@@ -79,11 +84,11 @@ function SectionPicker({
       <div className="option-list">
         {options.map((opt) => (
           <button
-            key={`${opt.program}-${opt.branch}-${opt.section}`}
+            key={`${opt.program}-${opt.branch}-${opt.section}-${opt.semester}`}
             type="button"
             onClick={() => onPick(opt)}
           >
-            {opt.program} {opt.branch} — Sec {opt.section}
+            {opt.program} {opt.branch} Sem {opt.semester} — Sec {opt.section}
           </button>
         ))}
       </div>
@@ -91,11 +96,7 @@ function SectionPicker({
   )
 }
 
-function MyTimetable({
-  section,
-}: {
-  section: { program: string; branch: string; section: string }
-}) {
+function MyTimetable({ section }: { section: SectionRef }) {
   const [grid, setGrid] = useState<Cell[][] | null>(null)
   const [freeGrid, setFreeGrid] = useState<Cell[][] | null>(null)
   const [hasData, setHasData] = useState(true)
@@ -107,7 +108,8 @@ function MyTimetable({
         (r) =>
           r.program === section.program &&
           r.branch === section.branch &&
-          r.section === section.section,
+          r.section === section.section &&
+          r.semester === section.semester,
       )
       const myChanges = changes.data.filter(
         (r) =>
@@ -126,7 +128,8 @@ function MyTimetable({
   return (
     <div className="dashboard">
       <h1>
-        My Timetable — {section.program} {section.branch} Sec {section.section}
+        My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
+        {section.section}
       </h1>
       {!hasData && (
         <p className="error">

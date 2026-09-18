@@ -11,7 +11,7 @@ type FacultyTab = 'teaching' | 'new-request'
 
 function App() {
   const [facultyTab, setFacultyTab] = useState<FacultyTab>('teaching')
-  const { profile, loading } = useMyProfile()
+  const { profile, loading, linkSection, linkFacultyName } = useMyProfile()
 
   return (
     <Authenticator>
@@ -33,7 +33,7 @@ function App() {
                   Sign out
                 </button>
               </nav>
-              <StudentDashboard />
+              <StudentDashboard profile={profile} linkSection={linkSection} />
             </div>
           )
         }
@@ -74,7 +74,9 @@ function App() {
               </button>
             </nav>
 
-            {facultyTab === 'teaching' && <TeacherDashboard />}
+            {facultyTab === 'teaching' && (
+              <TeacherDashboard profile={profile} linkFacultyName={linkFacultyName} />
+            )}
             {facultyTab === 'new-request' && <NewRequest requesterId={user?.userId ?? ''} />}
           </div>
         )

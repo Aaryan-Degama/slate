@@ -10,7 +10,7 @@ export type Profile = {
   id: string
   email: string
   role: 'STUDENT' | 'FACULTY' | 'ADMIN'
-  linkedSection: { program: string; branch: string; section: string } | null
+  linkedSection: { program: string; branch: string; section: string; semester: number } | null
   linkedFacultyName: string | null
 }
 const listMyUsers = client.models.User.list as unknown as () => Promise<{ data: Profile[] }>
@@ -49,7 +49,12 @@ export function useMyProfile() {
     }
   }, [])
 
-  const linkSection = async (section: { program: string; branch: string; section: string }) => {
+  const linkSection = async (section: {
+    program: string
+    branch: string
+    section: string
+    semester: number
+  }) => {
     if (!profile) return
     const updated = await updateUser({ id: profile.id, linkedSection: section })
     if (updated.data) setProfile(updated.data)

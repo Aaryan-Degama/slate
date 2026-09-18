@@ -3,7 +3,7 @@ import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry, type Cell } from './lib/grid'
-import { useMyProfile } from './lib/useMyProfile'
+import type { Profile } from './lib/useMyProfile'
 
 const client = generateClient<Schema>()
 
@@ -12,11 +12,13 @@ const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => 
   data: TimetableSlotRow[]
 }>
 
-export default function TeacherDashboard() {
-  const { profile, loading, linkFacultyName } = useMyProfile()
-
-  if (loading) return <p>Loading...</p>
-  if (!profile) return <p>Could not load your profile.</p>
+export default function TeacherDashboard({
+  profile,
+  linkFacultyName,
+}: {
+  profile: Profile
+  linkFacultyName: (name: string) => Promise<void>
+}) {
   if (!profile.linkedFacultyName) return <FacultyPicker onPick={linkFacultyName} />
 
   return <MyTeachingTimetable facultyName={profile.linkedFacultyName} />
