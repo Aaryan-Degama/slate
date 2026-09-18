@@ -1,5 +1,6 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { parseTimetable } from '../functions/parse-timetable/resource';
+import { importData } from '../functions/import-data/resource';
 
 /**
  * Slate's data model (see CLAUDE.md §4).
@@ -31,9 +32,8 @@ const schema = a.schema({
   // correction UI, which fixes real mistakes an extraction pass made
   // (see NOTES.md) -- this is curation of already-ingested data by the
   // admin role, not open editing.
-  // TODO: same acknowledged gap as SlotRequest/ScheduleChange below --
-  // should be role: ADMIN only via Cedar; open to any authenticated user
-  // until that's wired up.
+  // Writes are limited to the Cognito ADMIN group (the editor and the
+  // import Lambda); everyone signed in can read.
   TimetableSlot: a
     .model({
       program: a.string().required(),
@@ -53,7 +53,7 @@ const schema = a.schema({
       // originally discarded; backfilled from the same real source.
       sessionType: a.string(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update', 'delete'])]),
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
   SlotRequest: a
     .model({
@@ -117,9 +117,6 @@ const schema = a.schema({
   // batch/semester (via a CSV upload in the app -- see AdminDashboard's
   // sub-section gap prompt); a student's section is resolved by finding
   // which range their roll number falls in.
-  // TODO: same acknowledged gap as TimetableSlot -- write access should
-  // be ADMIN-only via Cedar; open to any authenticated user until that's
-  // wired up.
   RollRange: a
     .model({
       admissionYear: a.string().required(), // matches the year embedded in the email
@@ -130,14 +127,14 @@ const schema = a.schema({
       maxRoll: a.integer().required(),
       section: a.string().required(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
   // One row per student: which section (and B1/B2-style sub-section, if
   // the batch splits) they belong to, from an admin-uploaded student
   // list. Takes precedence over RollRange, which only fits clean
   // contiguous ranges. Courses and faculty are NOT stored here -- they
   // follow from the section's TimetableSlot rows.
-  // TODO: writes should be ADMIN-only via Cedar, same gap as TimetableSlot.
+  // Written only by the import-data Lambda (ADMIN group).
   StudentSection: a
     .model({
       admissionYear: a.string().required(),
@@ -148,7 +145,7 @@ const schema = a.schema({
       section: a.string().required(),
       subSection: a.string(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update', 'delete'])]),
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
   // Admin upload: parses a timetable file already uploaded to S3 and
   // returns proposed rows + validation issues per sheet (JSON string).
@@ -158,7 +155,31 @@ const schema = a.schema({
     .arguments({ key: a.string().required() })
     .returns(a.json())
     .handler(a.handler.function(parseTimetable))
-    .authorization((allow) => [allow.authenticated()]),
+    .authorization((allow) => [allow.group('ADMIN')]),
+
+  // Admin upload, second step: re-reads the file from S3, validates it
+  // with the admin's confirmed column mapping, diffs against DynamoDB and
+  // (unless dryRun) writes the changes. Returns a summary (JSON string).
+  importData: a
+    .mutation()
+    .arguments({
+      key: a.string().required(),
+      sheet: a.string().required(),
+      kind: a.string().required(), // 'timetable' | 'students'
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      rollCol: a.integer(),
+      emailCol: a.integer(),
+      sectionCol: a.integer(),
+      subSectionCol: a.integer(),
+      admissionYear: a.string(),
+      removeMissing: a.boolean(),
+      dryRun: a.boolean().required(),
+    })
+    .returns(a.json())
+    .handler(a.handler.function(importData))
+    .authorization((allow) => [allow.group('ADMIN')]),
 
   // Per-student course registration -- currently only meaningful for
   // electives, since core courses are already implied by section

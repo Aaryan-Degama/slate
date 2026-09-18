@@ -4,7 +4,7 @@ import { uploadData } from 'aws-amplify/storage'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry } from './lib/grid'
-import { listAll } from './lib/listAll'
+import { runImport, type ImportResult } from './lib/importData'
 import StudentImport, { type TableSheet } from './StudentImport'
 
 const client = generateClient<Schema>()
@@ -39,74 +39,13 @@ type SheetResult =
   | { sheet: string; kind: 'error'; error: string }
 type OkSheet = Extract<SheetResult, { kind: 'timetable' }>
 
-type SlotRow = {
-  id: string
-  program: string
-  branch: string
-  section: string
-  semester: number
-  day: string
-  startTime: string
-  endTime: string
-  courseId: string
-  room?: string | null
-  faculty?: string | null
-  sessionType?: string | null
-}
-
 // Same manual typing as the other admin screens (Amplify type-inference
 // workaround, see AdminTimetableEditor.tsx).
 const parseTimetable = (client.queries as unknown as {
   parseTimetable: (a: { key: string }) => Promise<{ data: unknown; errors?: { message: string }[] }>
 }).parseTimetable
-const createSlot = client.models.TimetableSlot.create as unknown as (
-  input: Omit<SlotRow, 'id'>,
-) => Promise<{ errors?: { message: string }[] }>
-const updateSlot = client.models.TimetableSlot.update as unknown as (
-  input: Partial<SlotRow> & { id: string },
-) => Promise<{ errors?: { message: string }[] }>
-const deleteSlot = client.models.TimetableSlot.delete as unknown as (
-  input: { id: string },
-) => Promise<{ errors?: { message: string }[] }>
-
-const rowKey = (r: { day: string; courseId: string; sessionType?: string | null; section: string; startTime: string }) =>
-  `${r.day}|${r.courseId}|${r.sessionType ?? ''}|${r.section}|${r.startTime}`
 
 type Batch = { program: string; branch: string; semester: number }
-type Diff = {
-  added: ParsedRow[]
-  changed: { existing: SlotRow; next: ParsedRow; fields: string[] }[]
-  unchanged: number
-  removed: SlotRow[]
-}
-
-function diffAgainst(existing: SlotRow[], rows: ParsedRow[]): Diff {
-  const byKey = new Map(existing.map((r) => [rowKey(r), r]))
-  const seen = new Set<string>()
-  const diff: Diff = { added: [], changed: [], unchanged: 0, removed: [] }
-  for (const next of rows) {
-    const k = rowKey(next)
-    seen.add(k)
-    const cur = byKey.get(k)
-    if (!cur) {
-      diff.added.push(next)
-      continue
-    }
-    const fields = (['endTime', 'room', 'faculty'] as const).filter((f) => (cur[f] ?? null) !== (next[f] ?? null))
-    if (fields.length) diff.changed.push({ existing: cur, next, fields })
-    else diff.unchanged++
-  }
-  diff.removed = existing.filter((r) => !seen.has(rowKey(r)))
-  return diff
-}
-
-async function inChunks<T>(items: T[], fn: (t: T) => Promise<{ errors?: { message: string }[] }>) {
-  for (let i = 0; i < items.length; i += 10) {
-    const results = await Promise.all(items.slice(i, i + 10).map(fn))
-    const failed = results.find((r) => r.errors?.length)
-    if (failed) throw new Error(failed.errors!.map((e) => e.message).join('; '))
-  }
-}
 
 export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'parsing' | 'results' | 'applying' | 'applied'>('idle')
@@ -116,7 +55,8 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [selected, setSelected] = useState<OkSheet | null>(null)
   const [selectedTable, setSelectedTable] = useState<TableSheet | null>(null)
   const [batch, setBatch] = useState<Batch | null>(null)
-  const [diff, setDiff] = useState<Diff | null>(null)
+  const [diff, setDiff] = useState<ImportResult | null>(null)
+  const [fileKey, setFileKey] = useState('')
   const [removeMissing, setRemoveMissing] = useState(false)
   const [appliedCount, setAppliedCount] = useState(0)
 
@@ -131,6 +71,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
       setStatus('uploading')
       const key = `timetable-uploads/${Date.now()}-${file.name.replace(/[^\w.-]+/g, '_')}`
       await uploadData({ path: key, data: file }).result
+      setFileKey(key)
 
       setStatus('parsing')
       const res = await parseTimetable({ key })
@@ -154,47 +95,20 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
     setBatch(b.program && b.branch && b.semester ? { program: b.program, branch: b.branch, semester: b.semester } : null)
   }
 
-  const compare = async () => {
+  const runTimetable = async (dryRun: boolean) => {
     if (!selected || !batch) return
     setError('')
+    if (!dryRun) setStatus('applying')
     try {
-      const { data: all } = await listAll<SlotRow>(client.models.TimetableSlot.list)
-      const existing = all.filter(
-        (r) => r.program === batch.program && r.branch === batch.branch && r.semester === batch.semester,
-      )
-      setDiff(diffAgainst(existing, selected.rows.map((r) => ({ ...r, ...batch }))))
+      const res = await runImport({ key: fileKey, sheet: selected.sheet, kind: 'timetable', ...batch, removeMissing, dryRun })
+      setDiff(res)
+      if (!dryRun) {
+        setAppliedCount(res.added + res.changedCount + (removeMissing ? res.removed : 0))
+        setStatus('applied')
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load current timetable.')
-    }
-  }
-
-  const apply = async () => {
-    if (!diff || !batch) return
-    setStatus('applying')
-    setError('')
-    try {
-      await inChunks(diff.added, (r) =>
-        createSlot({
-          ...batch,
-          day: r.day,
-          startTime: r.startTime,
-          endTime: r.endTime,
-          courseId: r.courseId,
-          sessionType: r.sessionType,
-          section: r.section,
-          room: r.room,
-          faculty: r.faculty,
-        }),
-      )
-      await inChunks(diff.changed, (c) =>
-        updateSlot({ id: c.existing.id, endTime: c.next.endTime, room: c.next.room, faculty: c.next.faculty }),
-      )
-      if (removeMissing) await inChunks(diff.removed, (r) => deleteSlot({ id: r.id }))
-      setAppliedCount(diff.added.length + diff.changed.length + (removeMissing ? diff.removed.length : 0))
-      setStatus('applied')
-    } catch (err) {
-      setStatus('results')
-      setError(err instanceof Error ? err.message : 'Apply failed.')
+      if (!dryRun) setStatus('results')
+      setError(err instanceof Error ? err.message : 'Import failed.')
     }
   }
 
@@ -278,7 +192,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {selectedTable && <StudentImport sheet={selectedTable} />}
+      {selectedTable && <StudentImport sheet={selectedTable} fileKey={fileKey} />}
 
       {selected && (
         <>
@@ -339,17 +253,22 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
           )}
 
           {!diff && (
-            <button className="primary" disabled={!batch?.program || !batch.branch || !batch.semester} onClick={compare}>
+            <button
+              className="primary"
+              disabled={!batch?.program || !batch.branch || !batch.semester}
+              onClick={() => runTimetable(true)}
+            >
               Compare with current timetable
             </button>
           )}
+          {error && <p className="error">{error}</p>}
 
           {diff && (
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <h2>Changes</h2>
               <p>
-                {diff.added.length} new · {diff.changed.length} changed · {diff.unchanged} unchanged ·{' '}
-                {diff.removed.length} in the app but not in this file
+                {diff.added} new · {diff.changedCount} changed · {diff.unchanged} unchanged · {diff.removed} in the app
+                but not in this file
               </p>
               {diff.changed.length > 0 && (
                 <table className="admin-table">
@@ -362,31 +281,29 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                   </thead>
                   <tbody>
                     {diff.changed.map((c) => (
-                      <tr key={c.existing.id}>
-                        <td>
-                          {c.next.courseId} ({c.next.sessionType}) Sec {c.next.section} {c.next.day} {c.next.startTime}
-                        </td>
-                        <td>{c.fields.map((f) => `${f}: ${c.existing[f] ?? '—'}`).join(', ')}</td>
-                        <td>{c.fields.map((f) => `${f}: ${c.next[f] ?? '—'}`).join(', ')}</td>
+                      <tr key={c.what}>
+                        <td>{c.what}</td>
+                        <td>{c.before}</td>
+                        <td>{c.after}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-              {diff.removed.length > 0 && (
+              {diff.removed > 0 && (
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input type="checkbox" checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
-                  Also delete the {diff.removed.length} class(es) that aren't in this file
+                  Also delete the {diff.removed} class(es) that aren't in this file
                 </label>
               )}
               <button
                 className="primary"
-                disabled={status === 'applying' || diff.added.length + diff.changed.length + (removeMissing ? diff.removed.length : 0) === 0}
-                onClick={apply}
+                disabled={status === 'applying' || diff.added + diff.changedCount + (removeMissing ? diff.removed : 0) === 0}
+                onClick={() => runTimetable(false)}
               >
                 {status === 'applying'
                   ? 'Applying...'
-                  : `Apply ${diff.added.length + diff.changed.length + (removeMissing ? diff.removed.length : 0)} change(s)`}
+                  : `Apply ${diff.added + diff.changedCount + (removeMissing ? diff.removed : 0)} change(s)`}
               </button>
             </div>
           )}

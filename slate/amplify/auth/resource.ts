@@ -20,6 +20,9 @@ export const auth = defineAuth({
       mutable: true,
     },
   },
+  // Admin rights come from this group, not the User.role field: users can
+  // edit their own User row, but only the AWS account can add group members.
+  groups: ['ADMIN'],
   triggers: {
     preSignUp,
   },

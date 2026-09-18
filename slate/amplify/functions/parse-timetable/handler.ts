@@ -1,26 +1,14 @@
-import { Readable } from 'node:stream'
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import ExcelJS from 'exceljs'
+import { loadWorkbook } from './load'
 import { processSheet } from './reader'
 import { readTable } from './table'
-
-const s3 = new S3Client({})
 
 /** Reads an uploaded file from S3 and classifies each sheet: a timetable
  * (header row of time slots) goes through read -> map -> validate; any
  * other table (e.g. a student list) comes back raw with a guessed column
- * mapping. Writes nothing -- the admin reviews and applies in the app. */
+ * mapping. Writes nothing -- import-data does that after admin review. */
 export const handler = async (event: { arguments: { key: string } }) => {
   const { key } = event.arguments
-  if (!key.startsWith('timetable-uploads/')) throw new Error('key must be under timetable-uploads/')
-
-  const obj = await s3.send(
-    new GetObjectCommand({ Bucket: process.env.TIMETABLE_UPLOADS_BUCKET_NAME, Key: key }),
-  )
-  const bytes = Buffer.from(await obj.Body!.transformToByteArray())
-  const wb = new ExcelJS.Workbook()
-  if (/\.csv$/i.test(key)) await wb.csv.read(Readable.from(bytes))
-  else await wb.xlsx.load(bytes as unknown as ArrayBuffer)
+  const wb = await loadWorkbook(key)
 
   const sheets = wb.worksheets.map((ws) => {
     try {
