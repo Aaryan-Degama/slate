@@ -42,6 +42,7 @@ export default function AdminTimetableEditor() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Partial<SlotRow> | null>(null)
   const [error, setError] = useState('')
+  const [pickerRows, setPickerRows] = useState<SlotRow[] | null>(null)
 
   useEffect(() => {
     listSlots().then(({ data }) => {
@@ -83,6 +84,11 @@ export default function AdminTimetableEditor() {
   const grid: Cell[][] | null = selected ? buildGrid(rows.map((r) => ({ ...r } as BusyEntry))) : null
 
   const handleBusyClick = (entry: BusyEntry) => {
+    if (entry.mergedIds && entry.mergedIds.length > 1) {
+      const matching = rows.filter((r) => entry.mergedIds!.includes(r.id))
+      setPickerRows(matching)
+      return
+    }
     const row = rows.find((r) => r.id === entry.id)
     if (row) setEditing({ ...row })
   }
@@ -167,6 +173,32 @@ export default function AdminTimetableEditor() {
         <TimetableGrid grid={grid} onBusyClick={handleBusyClick} onEmptyClick={handleEmptyClick} />
       )}
       {selected && loading && <p>Loading timetable...</p>}
+
+      {pickerRows && (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h2>Which section?</h2>
+          <p className="subtitle">
+            These sections share this class (same course, time, and room) — shown merged above.
+            Pick one to edit or delete just that row.
+          </p>
+          <div className="option-list">
+            {pickerRows.map((row) => (
+              <button
+                key={row.id}
+                onClick={() => {
+                  setEditing({ ...row })
+                  setPickerRows(null)
+                }}
+              >
+                Sec {row.section}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setPickerRows(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       {editing && (
         <EditForm

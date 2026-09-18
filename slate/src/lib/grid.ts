@@ -26,6 +26,12 @@ export type BusyEntry = {
   room?: string | null;
   faculty?: string | null;
   section?: string;
+  /** Present when this entry represents several underlying rows merged
+   * for display (same course/time/room, different sections -- e.g. the
+   * source sheet's "TOC - Sec B2, C" got split into two rows on
+   * ingestion for easy per-section querying, then re-merged here for
+   * anyone looking at multiple sections at once). */
+  mergedIds?: string[];
 };
 
 export type ChangeEntry = {
@@ -47,14 +53,38 @@ export type Cell = {
 const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
   aStart < bEnd && bStart < aEnd;
 
+/** Combine entries that are really "the same class," just split across
+ * sections during ingestion (same course, same day/time, same room) --
+ * e.g. "TOC - Sec B2, C" becomes one "Sec B2, C" block instead of two
+ * identical-looking ones stacked in the same cell. */
+function mergeSameClass(entries: BusyEntry[]): BusyEntry[] {
+  const groups = new Map<string, BusyEntry[]>();
+  for (const e of entries) {
+    const key = `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.room ?? ''}`;
+    const group = groups.get(key);
+    if (group) group.push(e);
+    else groups.set(key, [e]);
+  }
+  return [...groups.values()].map((group) => {
+    if (group.length === 1) return group[0];
+    const sections = [...new Set(group.map((g) => g.section).filter(Boolean))] as string[];
+    sections.sort();
+    return {
+      ...group[0],
+      section: sections.join(', '),
+      mergedIds: group.map((g) => g.id).filter((id): id is string => Boolean(id)),
+    };
+  });
+}
+
 export function buildGrid(busy: BusyEntry[], changes: ChangeEntry[] = []): Cell[][] {
   return DAYS.map((day) =>
     HOURS.map(({ start, end }) => ({
       day,
       start,
       end,
-      busy: busy.filter(
-        (b) => b.day === day && overlaps(start, end, b.startTime, b.endTime),
+      busy: mergeSameClass(
+        busy.filter((b) => b.day === day && overlaps(start, end, b.startTime, b.endTime)),
       ),
       change:
         changes.find(
