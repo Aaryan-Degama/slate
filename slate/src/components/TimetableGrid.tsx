@@ -89,8 +89,8 @@ function GridCell({
             <div className="course-line">
               <span className="course">{b.courseId}</span>
               {b.section && <span className="meta">Sec {b.section}</span>}
+              {b.room && <span className="meta">{b.room}</span>}
             </div>
-            {b.room && <span className="meta">{b.room}</span>}
           </div>
         ))}
       </td>
