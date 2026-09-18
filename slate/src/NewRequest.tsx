@@ -11,20 +11,18 @@ const client = generateClient<Schema>()
 // regardless of the actual schema. Typed manually here instead.
 type Section = { program: string; branch: string; section: string }
 
+// sections/constraints are AWSJSON on the wire (a.json() fields) -- the
+// real generated client auto-(de)serializes that; our manually-cast call
+// (see note above) doesn't, so we stringify by hand. See NOTES.md.
 type SlotRequestInput = {
   requesterId: string
   status: 'PROPOSED' | 'CONFIRMED'
-  sections: Section[]
-  constraints: {
-    earliestTime: string
-    latestTime: string
-    allowedDays: string[]
-    minDurationMins: number
-  }
+  sections: string
+  constraints: string
 }
 const createSlotRequest = client.models.SlotRequest.create as unknown as (
   input: SlotRequestInput,
-) => Promise<{ data: { id: string } | null }>
+) => Promise<{ data: { id: string } | null; errors?: { message: string }[] }>
 
 const updateSlotRequest = client.models.SlotRequest.update as unknown as (
   input: { id: string; status: 'CONFIRMED' },
@@ -110,9 +108,12 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
       const created = await createSlotRequest({
         requesterId,
         status: 'PROPOSED',
-        sections: validSections,
-        constraints: { earliestTime, latestTime, allowedDays, minDurationMins },
+        sections: JSON.stringify(validSections),
+        constraints: JSON.stringify({ earliestTime, latestTime, allowedDays, minDurationMins }),
       })
+      if (created.errors?.length) {
+        throw new Error(created.errors.map((e) => e.message).join('; '))
+      }
       const id = created.data?.id
       if (!id) throw new Error('Request was not saved.')
       setRequestId(id)

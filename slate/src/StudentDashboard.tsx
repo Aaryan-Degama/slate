@@ -27,6 +27,7 @@ export default function StudentDashboard({
   linkSection: (section: SectionRef) => Promise<void>
 }) {
   const [autoResolving, setAutoResolving] = useState(!profile.linkedSection)
+  const [linkError, setLinkError] = useState('')
 
   useEffect(() => {
     if (profile.linkedSection) {
@@ -37,14 +38,25 @@ export default function StudentDashboard({
     // only fall back to asking the student if nothing matches.
     const resolved = resolveSectionFromEmail(profile.email)
     if (resolved) {
-      linkSection(resolved).finally(() => setAutoResolving(false))
+      linkSection(resolved)
+        .catch((err) => setLinkError(err instanceof Error ? err.message : String(err)))
+        .finally(() => setAutoResolving(false))
     } else {
       setAutoResolving(false)
     }
   }, [profile.email, profile.linkedSection])
 
   if (autoResolving) return <p>Loading...</p>
-  if (!profile.linkedSection) return <SectionPicker onPick={linkSection} />
+  if (!profile.linkedSection) {
+    return (
+      <>
+        {linkError && (
+          <p className="error">Automatic section detection failed: {linkError}</p>
+        )}
+        <SectionPicker onPick={linkSection} />
+      </>
+    )
+  }
 
   return <MyTimetable section={profile.linkedSection as SectionRef} />
 }
