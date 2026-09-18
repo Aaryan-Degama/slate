@@ -6,9 +6,18 @@ the whole cohort rather than guessing who picked what).
 
 This sheet has MDM-3 (the minor/elective basket, genuinely meeting at
 three different times -- confirms the "options within a basket can have
-different hour patterns" case flagged earlier), plus BPM, HI, and CE,
-each of which also has its own separate common slot(s) not captured by
-the per-section regex.
+different hour patterns" case flagged earlier), plus HI and CE, each of
+which also has its own separate common slot(s) not captured by the
+per-section regex.
+
+NOTE: BPM was originally included here too and was wrong -- the sheet
+labels it "BPM (L) - IT-BI (LT-3112)", where "IT-BI" is a cohort
+qualifier (a separate combined IT+BI program, not "everyone in IT"),
+the same shape of label as the regular per-section entries ("- Sec X"),
+just naming a different audience instead of a section. It should never
+have been treated as a generic elective applying to A/B/C. We don't
+track the IT-BI cohort at all right now (no roll-range data for it),
+so it's correctly left out entirely rather than wrongly applied here.
 """
 import uuid
 import boto3
@@ -19,8 +28,6 @@ REGION = 'ap-south-1'
 # (label, day, startTime, endTime) -- read directly off the real grid
 # (BTech5thSem sheet).
 BLOCKS = [
-    ('BPM', 'MON', '09:00', '10:00'),
-    ('BPM', 'THU', '10:00', '11:00'),
     ('HI', 'MON', '14:30', '15:30'),
     ('MDM-3', 'TUE', '09:00', '10:00'),
     ('MDM-3', 'TUE', '16:30', '17:30'),
