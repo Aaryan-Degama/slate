@@ -25,9 +25,14 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.owner()]),
 
-  // Read-only from the app's point of view: ingested from official AAA
-  // timetable PDFs by the Textract/Bedrock batch job (see CLAUDE.md §3),
-  // never edited by users.
+  // Ingested from official AAA timetable PDFs/sheets (see CLAUDE.md §3),
+  // never edited by students/faculty. Write access exists for the Admin
+  // correction UI, which fixes real mistakes an extraction pass made
+  // (see NOTES.md) -- this is curation of already-ingested data by the
+  // admin role, not open editing.
+  // TODO: same acknowledged gap as SlotRequest/ScheduleChange below --
+  // should be role: ADMIN only via Cedar; open to any authenticated user
+  // until that's wired up.
   TimetableSlot: a
     .model({
       program: a.string().required(),
@@ -43,7 +48,7 @@ const schema = a.schema({
       // spreadsheet (added Day 2 for the teacher dashboard).
       faculty: a.string(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update', 'delete'])]),
 
   SlotRequest: a
     .model({

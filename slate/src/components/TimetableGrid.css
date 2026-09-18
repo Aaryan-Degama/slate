@@ -64,6 +64,39 @@
   gap: 1px;
 }
 
+.course-block.editable {
+  cursor: pointer;
+  padding: 4px 6px;
+  margin: -4px -6px 2px;
+  border-radius: 5px;
+  transition: background 0.12s ease;
+}
+
+.course-block.editable:hover {
+  background: var(--accent-bg);
+}
+
+.grid-cell.editable-empty {
+  cursor: pointer;
+  position: relative;
+}
+
+.grid-cell.editable-empty:hover {
+  background: var(--accent-bg);
+}
+
+.add-hint {
+  display: block;
+  text-align: center;
+  color: var(--border);
+  font-size: 16px;
+  line-height: 46px;
+}
+
+.grid-cell.editable-empty:hover .add-hint {
+  color: var(--accent);
+}
+
 .course {
   font-weight: 700;
   font-size: 14px;

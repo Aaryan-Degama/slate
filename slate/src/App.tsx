@@ -4,10 +4,12 @@ import NewRequest from './NewRequest'
 import StudentDashboard from './StudentDashboard'
 import TeacherDashboard from './TeacherDashboard'
 import AdminDashboard from './AdminDashboard'
+import AdminTimetableEditor from './AdminTimetableEditor'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
 type FacultyTab = 'teaching' | 'new-request'
+type AdminTab = 'data' | 'edit'
 
 function AppShell({
   profile,
@@ -66,6 +68,7 @@ function AppShell({
 
 function App() {
   const [facultyTab, setFacultyTab] = useState<FacultyTab>('teaching')
+  const [adminTab, setAdminTab] = useState<AdminTab>('data')
   const { profile, loading, linkSection, linkFacultyName } = useMyProfile()
 
   return (
@@ -98,9 +101,23 @@ function App() {
             <AppShell
               profile={profile}
               onSignOut={() => signOut?.()}
-              navItems={[{ key: 'data', label: 'Ingested Data', active: true, onClick: () => {} }]}
+              navItems={[
+                {
+                  key: 'data',
+                  label: 'Ingested Data',
+                  active: adminTab === 'data',
+                  onClick: () => setAdminTab('data'),
+                },
+                {
+                  key: 'edit',
+                  label: 'Correct Timetable',
+                  active: adminTab === 'edit',
+                  onClick: () => setAdminTab('edit'),
+                },
+              ]}
             >
-              <AdminDashboard />
+              {adminTab === 'data' && <AdminDashboard />}
+              {adminTab === 'edit' && <AdminTimetableEditor />}
             </AppShell>
           )
         }

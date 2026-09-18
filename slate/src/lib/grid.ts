@@ -18,6 +18,7 @@ export const HOURS: { start: string; end: string }[] = [
 ];
 
 export type BusyEntry = {
+  id?: string;
   day: string;
   startTime: string;
   endTime: string;
