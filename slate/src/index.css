@@ -1,49 +1,51 @@
-:root {
-  --text: #57606a;
-  --text-h: #0e1116;
-  --bg: #ffffff;
-  --bg-subtle: #f6f7f9;
-  --border: #e2e5e9;
-  --code-bg: #f6f7f9;
-  --accent: #2563eb;
-  --accent-bg: rgba(37, 99, 235, 0.08);
-  --accent-border: rgba(37, 99, 235, 0.4);
-  --free: #1a8a4a;
-  --free-bg: rgba(26, 138, 74, 0.12);
-  --danger: #d33636;
-  --danger-bg: rgba(211, 54, 54, 0.1);
-  --shadow: rgba(16, 24, 40, 0.06) 0 1px 2px, rgba(16, 24, 40, 0.04) 0 1px 3px;
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+:root {
+  --text: #6d7b77;
+  --text-h: #19252c;
+  --bg: #ffffff;
+  --bg-subtle: #f5f7f6;
+  --border: #e3ebe7;
+  --code-bg: #f5f7f6;
+
+  --accent: #187c55;
+  --accent-hover: #116c48;
+  --accent-bg: #e4f5eb;
+  --accent-border: #d7f3e1;
+
+  --sidebar-bg: #113c35;
+  --sidebar-bg-alt: #133d36;
+  --sidebar-text: #eaf4ef;
+  --sidebar-text-muted: #bfd4cb;
+  --sidebar-active: #23564b;
+
+  --free: #187c55;
+  --free-bg: #e4f5eb;
+  --danger: #b23c35;
+  --danger-bg: #fff1ed;
+  --danger-border: #f4d2c7;
+
+  --role-admin-bg: #f0eafb;
+  --role-admin-text: #6542a2;
+  --role-faculty-bg: #e9f2fa;
+  --role-faculty-text: #376d99;
+  --role-student-bg: #edf6f0;
+  --role-student-text: #317653;
+
+  --shadow: 0 4px 17px rgba(23, 60, 48, 0.06);
+
+  --sans: 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Playfair Display', Georgia, serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 15px/1.5 var(--sans);
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text);
-  background: var(--bg);
+  background: var(--bg-subtle);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9aa4b2;
-    --text-h: #f2f4f7;
-    --bg: #0f1115;
-    --bg-subtle: #161920;
-    --border: #262b34;
-    --code-bg: #161920;
-    --accent: #5b8def;
-    --accent-bg: rgba(91, 141, 239, 0.14);
-    --accent-border: rgba(91, 141, 239, 0.4);
-    --free: #2fb872;
-    --free-bg: rgba(47, 184, 114, 0.16);
-    --danger: #e56b6b;
-    --danger-bg: rgba(229, 107, 107, 0.14);
-    --shadow: rgba(0, 0, 0, 0.4) 0 1px 2px, rgba(0, 0, 0, 0.3) 0 1px 3px;
-  }
 }
 
 * {
@@ -61,24 +63,31 @@ body {
 h1,
 h2,
 h3 {
-  font-family: var(--sans);
+  font-family: var(--serif);
   font-weight: 600;
   color: var(--text-h);
   margin: 0 0 4px;
+  letter-spacing: -0.3px;
 }
 
 h1 {
-  font-size: 22px;
-  letter-spacing: -0.3px;
+  font-size: 28px;
 }
 h2 {
-  font-size: 17px;
+  font-size: 19px;
 }
 p {
   margin: 0;
 }
 
 button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
   font: inherit;
 }
 

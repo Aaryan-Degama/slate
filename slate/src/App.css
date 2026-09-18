@@ -1,59 +1,146 @@
-.app-shell {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 0 20px 60px;
-  text-align: left;
+/* Shell layout, ported from the UniClass admin-shell pattern */
+.admin-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 245px 1fr;
 }
 
-.tabs {
+.sidebar {
+  padding: 28px 17px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar .brand {
+  padding: 0 9px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 32px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.app-title {
+  gap: 10px;
   font-weight: 700;
-  font-size: 16px;
-  color: var(--text-h);
-  margin-right: 12px;
+  font-size: 21px;
+  letter-spacing: -0.5px;
+  color: #fff;
 }
 
-.tabs button {
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  background: #58b789;
+  color: #11382f;
+  font-family: var(--serif);
+  font-weight: 700;
+}
+
+.sidebar-label {
+  color: #8fb7a7;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  margin: 40px 9px 11px;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  border: 0;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 7px 12px;
-  cursor: pointer;
-  color: var(--text);
+  color: var(--sidebar-text-muted);
+  border-radius: 7px;
+  padding: 11px 12px;
+  text-align: left;
+  font-weight: 600;
+  margin: 2px 0;
   font-size: 14px;
 }
 
-.tabs button:hover {
-  background: var(--bg-subtle);
+.nav-item:hover,
+.nav-item.active {
+  background: var(--sidebar-active);
+  color: #fff;
 }
 
-.tabs button.active {
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 600;
+.sidebar-bottom {
+  margin-top: auto;
 }
 
-.tabs .sign-out {
-  margin-left: auto;
-  color: var(--text);
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 8px;
+  border-top: 1px solid #386258;
 }
 
-.card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  background: var(--bg);
-  box-shadow: var(--shadow);
+.profile strong {
+  display: block;
+  font-size: 12px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
 }
 
+.profile small {
+  display: block;
+  margin-top: 4px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  background: #dbf1e4;
+  color: #14613f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.logout {
+  border: 0;
+  background: none;
+  color: #b7d3c7;
+  margin: 9px 8px 0;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.admin-content {
+  padding: 40px clamp(24px, 5vw, 72px);
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Role pills */
+.role-pill {
+  border-radius: 99px;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.role-pill.admin {
+  background: var(--role-admin-bg);
+  color: var(--role-admin-text);
+}
+.role-pill.faculty {
+  background: var(--role-faculty-bg);
+  color: var(--role-faculty-text);
+}
+.role-pill.student {
+  background: var(--role-student-bg);
+  color: var(--role-student-text);
+}
+
+/* Content patterns */
 .new-request,
 .dashboard,
 .identity-link {
@@ -72,34 +159,33 @@ label {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-h);
 }
 
 input,
 select {
-  font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text-h);
+  padding: 11px 12px;
+  border: 1px solid #d7e1dc;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d2d28;
+  outline: none;
 }
 
 input:focus,
 select:focus {
-  outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-bg);
+  box-shadow: 0 0 0 3px var(--accent-border);
 }
 
 button {
-  padding: 8px 14px;
-  border-radius: 6px;
+  padding: 11px 16px;
+  border-radius: 7px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: #fff;
   color: var(--text-h);
-  cursor: pointer;
+  font-weight: 600;
 }
 
 button:hover {
@@ -108,20 +194,20 @@ button:hover {
 
 button[type='submit'],
 .primary {
+  border: 0;
   background: var(--accent);
-  border-color: var(--accent);
   color: #fff;
-  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(18, 97, 67, 0.2);
 }
 
 button[type='submit']:hover,
 .primary:hover {
-  filter: brightness(1.08);
+  background: var(--accent-hover);
 }
 
 button:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .section-row {
@@ -134,8 +220,8 @@ button:disabled {
 }
 
 fieldset {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid #deE7e2;
+  border-radius: 7px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -163,10 +249,12 @@ fieldset legend {
 }
 
 .error {
+  margin: 0;
   color: var(--danger);
   background: var(--danger-bg);
-  padding: 8px 12px;
-  border-radius: 6px;
+  border: 1px solid var(--danger-border);
+  padding: 11px 13px;
+  border-radius: 8px;
   font-size: 13px;
 }
 
@@ -188,45 +276,91 @@ fieldset legend {
   color: var(--free);
 }
 
+/* Admin stat cards, ported from UniClass's stat-grid/stat-card */
 .admin-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
 }
 
 .stat-tile {
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
-  text-align: center;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+  text-align: left;
 }
 
 .stat-tile .value {
-  font-size: 24px;
+  display: block;
+  font-size: 30px;
   font-weight: 700;
   color: var(--text-h);
+  margin: 6px 0 2px;
 }
 
 .stat-tile .label {
-  font-size: 12px;
+  display: block;
   color: var(--text);
-  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 table.admin-table {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
 table.admin-table th,
 table.admin-table td {
   border-bottom: 1px solid var(--border);
-  padding: 8px 10px;
+  padding: 12px 14px;
   text-align: left;
 }
 
 table.admin-table th {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 850px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    min-height: auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 6px;
+  }
+  .sidebar-label,
+  .sidebar-bottom {
+    display: none;
+  }
+  .sidebar .brand {
+    padding: 0;
+    margin-right: 12px;
+  }
+  .nav-item {
+    font-size: 12px;
+    padding: 8px;
+  }
+  .admin-content {
+    padding: 28px 20px;
+  }
 }

@@ -4,10 +4,65 @@ import NewRequest from './NewRequest'
 import StudentDashboard from './StudentDashboard'
 import TeacherDashboard from './TeacherDashboard'
 import AdminDashboard from './AdminDashboard'
-import { useMyProfile } from './lib/useMyProfile'
+import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
 type FacultyTab = 'teaching' | 'new-request'
+
+function AppShell({
+  profile,
+  onSignOut,
+  navItems,
+  children,
+}: {
+  profile: Profile
+  onSignOut: () => void
+  navItems: { key: string; label: string; active: boolean; onClick: () => void }[]
+  children: React.ReactNode
+}) {
+  const rolePillClass =
+    profile.role === 'ADMIN'
+      ? 'role-pill admin'
+      : profile.role === 'FACULTY'
+        ? 'role-pill faculty'
+        : 'role-pill student'
+
+  return (
+    <div className="admin-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">S</span>
+          <span>Slate</span>
+        </div>
+        <p className="sidebar-label">Menu</p>
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            className={`nav-item${item.active ? ' active' : ''}`}
+            onClick={item.onClick}
+          >
+            {item.label}
+          </button>
+        ))}
+        <div className="sidebar-bottom">
+          <div className="profile">
+            <span className="avatar">{profile.email.charAt(0).toUpperCase()}</span>
+            <div>
+              <strong>{profile.email}</strong>
+              <small>
+                <span className={rolePillClass}>{profile.role}</span>
+              </small>
+            </div>
+          </div>
+          <button className="logout" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      </aside>
+      <main className="admin-content">{children}</main>
+    </div>
+  )
+}
 
 function App() {
   const [facultyTab, setFacultyTab] = useState<FacultyTab>('teaching')
@@ -18,67 +73,63 @@ function App() {
       {({ signOut, user }) => {
         if (loading || !profile) {
           return (
-            <div className="app-shell">
-              <p>Loading...</p>
+            <div className="admin-shell">
+              <main className="admin-content">
+                <p>Loading...</p>
+              </main>
             </div>
           )
         }
 
         if (profile.role === 'STUDENT') {
           return (
-            <div className="app-shell">
-              <nav className="tabs">
-                <span className="app-title">Slate</span>
-                <button className="sign-out" onClick={signOut}>
-                  Sign out
-                </button>
-              </nav>
+            <AppShell
+              profile={profile}
+              onSignOut={() => signOut?.()}
+              navItems={[{ key: 'timetable', label: 'My Timetable', active: true, onClick: () => {} }]}
+            >
               <StudentDashboard profile={profile} linkSection={linkSection} />
-            </div>
+            </AppShell>
           )
         }
 
         if (profile.role === 'ADMIN') {
           return (
-            <div className="app-shell">
-              <nav className="tabs">
-                <span className="app-title">Slate — Admin</span>
-                <button className="sign-out" onClick={signOut}>
-                  Sign out
-                </button>
-              </nav>
+            <AppShell
+              profile={profile}
+              onSignOut={() => signOut?.()}
+              navItems={[{ key: 'data', label: 'Ingested Data', active: true, onClick: () => {} }]}
+            >
               <AdminDashboard />
-            </div>
+            </AppShell>
           )
         }
 
         // FACULTY
         return (
-          <div className="app-shell">
-            <nav className="tabs">
-              <span className="app-title">Slate</span>
-              <button
-                className={facultyTab === 'teaching' ? 'active' : ''}
-                onClick={() => setFacultyTab('teaching')}
-              >
-                My Teaching Timetable
-              </button>
-              <button
-                className={facultyTab === 'new-request' ? 'active' : ''}
-                onClick={() => setFacultyTab('new-request')}
-              >
-                Schedule a Session
-              </button>
-              <button className="sign-out" onClick={signOut}>
-                Sign out
-              </button>
-            </nav>
-
+          <AppShell
+            profile={profile}
+            onSignOut={() => signOut?.()}
+            navItems={[
+              {
+                key: 'teaching',
+                label: 'My Teaching Timetable',
+                active: facultyTab === 'teaching',
+                onClick: () => setFacultyTab('teaching'),
+              },
+              {
+                key: 'new-request',
+                label: 'Schedule a Session',
+                active: facultyTab === 'new-request',
+                onClick: () => setFacultyTab('new-request'),
+              },
+            ]}
+          >
             {facultyTab === 'teaching' && (
               <TeacherDashboard profile={profile} linkFacultyName={linkFacultyName} />
             )}
             {facultyTab === 'new-request' && <NewRequest requesterId={user?.userId ?? ''} />}
-          </div>
+          </AppShell>
         )
       }}
     </Authenticator>
