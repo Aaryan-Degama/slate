@@ -7,31 +7,37 @@ function entryKey(e: BusyEntry): string {
   return e.id ?? `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.section ?? ''}`
 }
 
-/** True when two hour-columns' busy lists are the exact same set of
- * entries -- i.e. genuinely the same multi-hour class continuing, not
- * just "some entry here happens to be long enough to cover both." */
-function sameEntries(a: BusyEntry[], b: BusyEntry[]): boolean {
-  if (a.length !== b.length) return false
-  const keys = new Set(a.map(entryKey))
-  return b.every((e) => keys.has(entryKey(e)))
+function unionEntries(a: BusyEntry[], b: BusyEntry[]): BusyEntry[] {
+  const map = new Map<string, BusyEntry>()
+  for (const e of [...a, ...b]) map.set(entryKey(e), e)
+  return [...map.values()]
 }
 
-/** How many consecutive HOURS columns (starting at hi) render as one
- * wide cell. Only merges a column into the span when it holds the exact
- * same busy entries as hi -- if a *different* class starts partway
- * through what looks like a multi-hour block (e.g. a neighboring 1-hour
- * class squeezed next to a 2-hour one), the span stops there instead of
- * skipping over it and silently dropping it from the render. */
-function spanCount(grid: Cell[][], di: number, hi: number): number {
-  const cell = grid[di][hi]
-  if (cell.busy.length === 0) return 1
+/** Clusters the hour-columns starting at hi into one wide cell, the way
+ * the source spreadsheet itself does: a genuinely multi-hour class (real
+ * start/end time) still renders as one merged cell, but a shorter class
+ * that shares part of that same window is stacked INTO that cell instead
+ * of being skipped over and dropped -- growing the span to cover the
+ * longest entry pulled in, and re-checking after each growth in case
+ * that pulled in something even longer. */
+function clusterSpan(grid: Cell[][], di: number, hi: number): { span: number; busy: BusyEntry[] } {
+  let busy = grid[di][hi].busy
+  if (busy.length === 0) return { span: 1, busy: [] }
   let span = 1
-  for (let j = hi + 1; j < HOURS.length; j++) {
-    if (HOURS[j].start !== HOURS[j - 1].end) break // gap (lunch)
-    if (!sameEntries(grid[di][j].busy, cell.busy)) break
-    span++
+  for (;;) {
+    const maxEnd = busy.reduce((m, e) => (e.endTime > m ? e.endTime : m), '')
+    let needed = span
+    for (let j = hi + span; j < HOURS.length; j++) {
+      if (HOURS[j].start !== HOURS[j - 1].end) break // gap (lunch)
+      if (HOURS[j].start >= maxEnd) break
+      needed++
+    }
+    if (needed === span) return { span, busy }
+    for (let k = span; k < needed; k++) {
+      busy = unionEntries(busy, grid[di][hi + k].busy)
+    }
+    span = needed
   }
-  return span
 }
 
 export default function TimetableGrid({
@@ -67,8 +73,8 @@ export default function TimetableGrid({
           const cells: React.ReactNode[] = []
           let hi = 0
           while (hi < HOURS.length) {
-            const cell = grid[di][hi]
-            const colSpan = spanCount(grid, di, hi)
+            const { span: colSpan, busy } = clusterSpan(grid, di, hi)
+            const cell: Cell = { ...grid[di][hi], busy }
             cells.push(
               <GridCell
                 key={HOURS[hi].start}
