@@ -266,6 +266,24 @@ fieldset legend {
   color: var(--free);
 }
 
+.card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.gap-warning {
+  border-left: 4px solid #c47a00;
+  background: #fff8ec;
+}
+
+.gap-row {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
 /* Admin stat cards, ported from UniClass's stat-grid/stat-card */
 .admin-stats {
   display: grid;

@@ -112,10 +112,13 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
 
   // The roll-number -> section mapping (CLAUDE.md §4a), as real data
-  // instead of hardcoded app code. An admin (eventually via a real
-  // upload/OCR pipeline; hand-entered directly for now) provides ranges
-  // per batch/semester; a student's section is resolved by finding which
-  // range their roll number falls in.
+  // instead of hardcoded app code. An admin provides ranges per
+  // batch/semester (via a CSV upload in the app -- see AdminDashboard's
+  // sub-section gap prompt); a student's section is resolved by finding
+  // which range their roll number falls in.
+  // TODO: same acknowledged gap as TimetableSlot -- write access should
+  // be ADMIN-only via Cedar; open to any authenticated user until that's
+  // wired up.
   RollRange: a
     .model({
       admissionYear: a.string().required(), // matches the year embedded in the email
@@ -126,7 +129,7 @@ const schema = a.schema({
       maxRoll: a.integer().required(),
       section: a.string().required(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
 
   // Per-student course registration -- currently only meaningful for
   // electives, since core courses are already implied by section
