@@ -4,6 +4,7 @@ import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, freeAcrossAll, type BusyEntry, type ChangeEntry, type Cell } from './lib/grid'
 import { useMyProfile } from './lib/useMyProfile'
+import { resolveSectionFromEmail } from './lib/rollLookup'
 
 const client = generateClient<Schema>()
 
@@ -18,8 +19,24 @@ const listScheduleChanges = client.models.ScheduleChange.list as unknown as () =
 
 export default function StudentDashboard() {
   const { profile, loading, linkSection } = useMyProfile()
+  const [autoResolving, setAutoResolving] = useState(true)
 
-  if (loading) return <p>Loading...</p>
+  useEffect(() => {
+    if (!profile || profile.linkedSection) {
+      setAutoResolving(false)
+      return
+    }
+    // Try the real roll-number->section mapping first (CLAUDE.md §4a);
+    // only fall back to asking the student if nothing matches.
+    const resolved = resolveSectionFromEmail(profile.email)
+    if (resolved) {
+      linkSection(resolved).finally(() => setAutoResolving(false))
+    } else {
+      setAutoResolving(false)
+    }
+  }, [profile])
+
+  if (loading || autoResolving) return <p>Loading...</p>
   if (!profile) return <p>Could not load your profile.</p>
   if (!profile.linkedSection) return <SectionPicker onPick={linkSection} />
 
@@ -81,6 +98,7 @@ function MyTimetable({
 }) {
   const [grid, setGrid] = useState<Cell[][] | null>(null)
   const [freeGrid, setFreeGrid] = useState<Cell[][] | null>(null)
+  const [hasData, setHasData] = useState(true)
   const [showFree, setShowFree] = useState(false)
 
   useEffect(() => {
@@ -97,6 +115,7 @@ function MyTimetable({
           r.branch === section.branch &&
           r.section === section.section,
       )
+      setHasData(mySlots.length > 0)
       setGrid(buildGrid(mySlots, myChanges))
       setFreeGrid(freeAcrossAll([mySlots]))
     })
@@ -109,6 +128,12 @@ function MyTimetable({
       <h1>
         My Timetable — {section.program} {section.branch} Sec {section.section}
       </h1>
+      {!hasData && (
+        <p className="error">
+          No timetable has been ingested for this section yet — the identity link worked
+          correctly, but this particular section's data hasn't been loaded into the system.
+        </p>
+      )}
       <button type="button" onClick={() => setShowFree((v) => !v)}>
         {showFree ? 'Show my classes' : 'Show free slots for my class'}
       </button>
