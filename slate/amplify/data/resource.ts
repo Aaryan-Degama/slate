@@ -101,6 +101,41 @@ const schema = a.schema({
     // role: FACULTY via Cedar. Moving to a role-checked custom mutation
     // once that's built; open to any authenticated user for now.
     .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
+
+  // The roll-number -> section mapping (CLAUDE.md §4a), as real data
+  // instead of hardcoded app code. An admin (eventually via a real
+  // upload/OCR pipeline; hand-entered directly for now) provides ranges
+  // per batch/semester; a student's section is resolved by finding which
+  // range their roll number falls in.
+  RollRange: a
+    .model({
+      admissionYear: a.string().required(), // matches the year embedded in the email
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      minRoll: a.integer().required(),
+      maxRoll: a.integer().required(),
+      section: a.string().required(),
+    })
+    .authorization((allow) => [allow.authenticated().to(['read'])]),
+
+  // Per-student course registration -- currently only meaningful for
+  // electives, since core courses are already implied by section
+  // membership in TimetableSlot. Intentionally left EMPTY for now: we
+  // don't have real per-student registration data yet. Schema exists so
+  // an admin-run ingestion pipeline (planned: OCR over registration
+  // sheets) has somewhere real to write once that data exists -- not
+  // fabricated here.
+  CourseRegistration: a
+    .model({
+      rollNumber: a.string().required(),
+      admissionYear: a.string().required(),
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      courseId: a.string().required(),
+    })
+    .authorization((allow) => [allow.authenticated().to(['read'])]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -34,15 +34,23 @@ export default function StudentDashboard({
       setAutoResolving(false)
       return
     }
+    let cancelled = false
     // Try the real roll-number->section mapping first (CLAUDE.md §4a);
     // only fall back to asking the student if nothing matches.
-    const resolved = resolveSectionFromEmail(profile.email)
-    if (resolved) {
-      linkSection(resolved)
-        .catch((err) => setLinkError(err instanceof Error ? err.message : String(err)))
-        .finally(() => setAutoResolving(false))
-    } else {
-      setAutoResolving(false)
+    resolveSectionFromEmail(profile.email)
+      .then((resolved) => {
+        if (cancelled) return
+        if (resolved) {
+          return linkSection(resolved).catch((err) =>
+            setLinkError(err instanceof Error ? err.message : String(err)),
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAutoResolving(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [profile.email, profile.linkedSection])
 
