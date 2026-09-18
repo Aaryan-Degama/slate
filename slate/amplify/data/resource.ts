@@ -47,6 +47,10 @@ const schema = a.schema({
       // Real faculty name from the course-legend table in the source
       // spreadsheet (added Day 2 for the teacher dashboard).
       faculty: a.string(),
+      // L (lecture) | P (practical) | T (tutorial), from the "(L)"/"(P)"
+      // tag in the source cell text -- captured during extraction but
+      // originally discarded; backfilled from the same real source.
+      sessionType: a.string(),
     })
     .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update', 'delete'])]),
 

@@ -129,6 +129,7 @@ function GridCell({
                 <span className="course-line-left">
                   <span className="course" style={{ color: color.text }}>
                     {b.courseId}
+                    {b.sessionType && ` (${b.sessionType.toUpperCase()})`}
                     {b.section && (
                       <>
                         <span className="section-dot">·</span>

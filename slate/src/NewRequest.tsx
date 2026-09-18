@@ -38,6 +38,7 @@ type TimetableSlotRow = {
   courseId: string
   room?: string | null
   faculty?: string | null
+  sessionType?: string | null
 }
 const listTimetableSlots = client.models.TimetableSlot.list as unknown as () => Promise<{
   data: TimetableSlotRow[]

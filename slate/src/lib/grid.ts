@@ -26,6 +26,8 @@ export type BusyEntry = {
   room?: string | null;
   faculty?: string | null;
   section?: string;
+  /** L (lecture) | P (practical) | T (tutorial). */
+  sessionType?: string | null;
   /** Present when this entry represents several underlying rows merged
    * for display (same course/time/room, different sections -- e.g. the
    * source sheet's "TOC - Sec B2, C" got split into two rows on

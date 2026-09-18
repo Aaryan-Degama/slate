@@ -18,6 +18,7 @@ type SlotRow = {
   courseId: string
   room?: string | null
   faculty?: string | null
+  sessionType?: string | null
 }
 const listSlots = client.models.TimetableSlot.list as unknown as () => Promise<{ data: SlotRow[] }>
 const createSlot = client.models.TimetableSlot.create as unknown as (
@@ -280,6 +281,18 @@ function EditForm({
             placeholder="e.g. A, B1"
             onChange={(e) => set({ section: e.target.value })}
           />
+        </label>
+        <label>
+          Session type
+          <select
+            value={value.sessionType ?? ''}
+            onChange={(e) => set({ sessionType: e.target.value || undefined })}
+          >
+            <option value="">—</option>
+            <option value="L">Lecture (L)</option>
+            <option value="P">Practical (P)</option>
+            <option value="T">Tutorial (T)</option>
+          </select>
         </label>
         <label>
           Room
