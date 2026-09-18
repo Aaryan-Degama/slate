@@ -11,22 +11,6 @@ const schema = a.schema({
   Role: a.enum(['FACULTY', 'STUDENT']),
   RequestStatus: a.enum(['PROPOSED', 'CONFIRMED']),
 
-  // A single { program, branch, section } combination — reused for the
-  // sections a request targets and, when no slot works, the section
-  // identified as the blocker.
-  SectionRef: a.customType({
-    program: a.string().required(),
-    branch: a.string().required(),
-    section: a.string().required(),
-  }),
-
-  Constraints: a.customType({
-    earliestTime: a.string(),
-    latestTime: a.string(),
-    allowedDays: a.string().array(),
-    minDurationMins: a.integer(),
-  }),
-
   User: a
     .model({
       email: a.string().required(),
@@ -55,8 +39,13 @@ const schema = a.schema({
     .model({
       requesterId: a.string().required(),
       status: a.ref('RequestStatus').required(),
-      sections: a.ref('SectionRef').required().array(),
-      constraints: a.ref('Constraints'),
+      // { program, branch, section }[] — stored as JSON rather than a
+      // ref'd array of a custom type, which hits a type-inference wall
+      // in the current @aws-amplify/backend version and widens the
+      // whole model's generated client types to `string[]`.
+      sections: a.json().required(),
+      // { earliestTime?, latestTime?, allowedDays?, minDurationMins? }
+      constraints: a.json(),
     })
     // TODO (Day 3): the PROPOSED -> CONFIRMED transition is the one
     // action CLAUDE.md gates to role: FACULTY via Cedar. Plain model
@@ -75,7 +64,8 @@ const schema = a.schema({
       room: a.string(),
       score: a.integer().required(),
       reason: a.string().required(),
-      blockingSection: a.ref('SectionRef'),
+      // { program, branch, section } — present only when no slot works
+      blockingSection: a.json(),
     })
     .authorization((allow) => [allow.authenticated().to(['read'])]),
 });
