@@ -1,43 +1,54 @@
-import { DAYS, HOURS, type Cell, type BusyEntry } from '../lib/grid'
+import { DAYS, HOURS, type Cell, type BusyEntry, type ChangeEntry } from '../lib/grid'
 import { courseColor } from '../lib/courseColor'
 import { courseFullName } from '../lib/courseNames'
 import './TimetableGrid.css'
 
-function entryKey(e: BusyEntry): string {
-  return e.id ?? `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.section ?? ''}`
+type Span =
+  | { kind: 'busy'; entry: BusyEntry; start: number; end: number }
+  | { kind: 'change'; change: ChangeEntry; start: number; end: number }
+type Placed = Span & { lane: number }
+
+function busyKey(e: BusyEntry): string {
+  return e.id ?? `${e.courseId}|${e.startTime}|${e.endTime}|${e.section ?? ''}`
 }
 
-function unionEntries(a: BusyEntry[], b: BusyEntry[]): BusyEntry[] {
-  const map = new Map<string, BusyEntry>()
-  for (const e of [...a, ...b]) map.set(entryKey(e), e)
-  return [...map.values()]
-}
+/** Every class for one day, each spanning exactly the hour columns it
+ * really covers, packed into lanes so overlapping classes of different
+ * lengths sit on separate lines -- a 2-hour class stays one wide box
+ * while a 1-hour class in the same window keeps its own 1-hour box, the
+ * way the source spreadsheet lays it out. An HTML table can't express
+ * that (colSpan cells can't overlap), hence the per-day CSS grid. */
+function layoutDay(row: Cell[]): { items: Placed[]; lanes: number } {
+  const spans = new Map<string, Span>()
+  row.forEach((cell, hi) => {
+    for (const e of cell.busy) {
+      const key = `b:${busyKey(e)}`
+      const existing = spans.get(key)
+      if (existing) existing.end = hi
+      else spans.set(key, { kind: 'busy', entry: e, start: hi, end: hi })
+    }
+    if (cell.change) {
+      const c = cell.change
+      const key = `c:${c.courseId}|${c.startTime}|${c.endTime}|${c.changeType}`
+      const existing = spans.get(key)
+      if (existing) existing.end = hi
+      else spans.set(key, { kind: 'change', change: c, start: hi, end: hi })
+    }
+  })
 
-/** Clusters the hour-columns starting at hi into one wide cell, the way
- * the source spreadsheet itself does: a genuinely multi-hour class (real
- * start/end time) still renders as one merged cell, but a shorter class
- * that shares part of that same window is stacked INTO that cell instead
- * of being skipped over and dropped -- growing the span to cover the
- * longest entry pulled in, and re-checking after each growth in case
- * that pulled in something even longer. */
-function clusterSpan(grid: Cell[][], di: number, hi: number): { span: number; busy: BusyEntry[] } {
-  let busy = grid[di][hi].busy
-  if (busy.length === 0) return { span: 1, busy: [] }
-  let span = 1
-  for (;;) {
-    const maxEnd = busy.reduce((m, e) => (e.endTime > m ? e.endTime : m), '')
-    let needed = span
-    for (let j = hi + span; j < HOURS.length; j++) {
-      if (HOURS[j].start !== HOURS[j - 1].end) break // gap (lunch)
-      if (HOURS[j].start >= maxEnd) break
-      needed++
+  const sorted = [...spans.values()].sort((a, b) => a.start - b.start || b.end - a.end)
+  const laneEnds: number[] = []
+  const items = sorted.map((s) => {
+    let lane = laneEnds.findIndex((end) => end < s.start)
+    if (lane === -1) {
+      lane = laneEnds.length
+      laneEnds.push(s.end)
+    } else {
+      laneEnds[lane] = s.end
     }
-    if (needed === span) return { span, busy }
-    for (let k = span; k < needed; k++) {
-      busy = unionEntries(busy, grid[di][hi + k].busy)
-    }
-    span = needed
-  }
+    return { ...s, lane }
+  })
+  return { items, lanes: Math.max(laneEnds.length, 1) }
 }
 
 export default function TimetableGrid({
@@ -56,8 +67,16 @@ export default function TimetableGrid({
   /** Admin editor: click an empty cell to add a class there. */
   onEmptyClick?: (day: string, start: string, end: string) => void
 }) {
+  const editable = Boolean(onBusyClick || onEmptyClick)
+
   return (
     <table className="timetable-grid">
+      <colgroup>
+        <col className="day-col" />
+        {HOURS.map((h) => (
+          <col key={h.start} />
+        ))}
+      </colgroup>
       <thead>
         <tr>
           <th></th>
@@ -70,27 +89,71 @@ export default function TimetableGrid({
       </thead>
       <tbody>
         {DAYS.map((day, di) => {
-          const cells: React.ReactNode[] = []
-          let hi = 0
-          while (hi < HOURS.length) {
-            const { span: colSpan, busy } = clusterSpan(grid, di, hi)
-            const cell: Cell = { ...grid[di][hi], busy }
-            cells.push(
-              <GridCell
-                key={HOURS[hi].start}
-                cell={cell}
-                colSpan={colSpan}
-                freeIsHighlighted={freeIsHighlighted}
-                onBusyClick={onBusyClick}
-                onEmptyClick={onEmptyClick}
-              />,
-            )
-            hi += colSpan
-          }
+          const row = grid[di]
+          const { items, lanes } = layoutDay(row)
           return (
             <tr key={day}>
               <th className="hour-label">{day}</th>
-              {cells}
+              <td className="day-lanes" colSpan={HOURS.length}>
+                <div
+                  className="day-grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${HOURS.length}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${lanes}, auto)`,
+                  }}
+                >
+                  {row.map((cell, hi) => {
+                    const empty = cell.busy.length === 0 && !cell.change
+                    return (
+                      <div
+                        key={`bg-${cell.start}`}
+                        className={`hour-bg${empty && freeIsHighlighted ? ' free' : ''}${
+                          empty && editable ? ' editable-empty' : ''
+                        }`}
+                        style={{ gridColumn: `${hi + 1}`, gridRow: `1 / ${lanes + 1}` }}
+                        onClick={
+                          empty && onEmptyClick
+                            ? () => onEmptyClick(cell.day, cell.start, cell.end)
+                            : undefined
+                        }
+                      >
+                        {empty && editable && <span className="add-hint">+</span>}
+                      </div>
+                    )
+                  })}
+                  {items.map((it) => {
+                    const style = {
+                      gridColumn: `${it.start + 1} / ${it.end + 2}`,
+                      gridRow: `${it.lane + 1}`,
+                    }
+                    if (it.kind === 'change') {
+                      const cls =
+                        it.change.changeType === 'SCHEDULED' ? 'change-scheduled' : 'change-cancelled'
+                      return (
+                        <div
+                          key={`c-${it.change.courseId}-${it.start}`}
+                          className={`slot-item change-block ${cls}`}
+                          style={style}
+                        >
+                          <span className="course">{it.change.courseId}</span>
+                          <span className="tag">
+                            {it.change.changeType === 'SCHEDULED' ? 'Newly scheduled' : 'Cancelled'}
+                          </span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <CourseBlock
+                        key={`b-${busyKey(it.entry)}`}
+                        entry={it.entry}
+                        style={style}
+                        editable={editable}
+                        onBusyClick={onBusyClick}
+                      />
+                    )
+                  })}
+                </div>
+              </td>
             </tr>
           )
         })}
@@ -99,79 +162,44 @@ export default function TimetableGrid({
   )
 }
 
-function GridCell({
-  cell,
-  colSpan,
-  freeIsHighlighted,
+function CourseBlock({
+  entry: b,
+  style,
+  editable,
   onBusyClick,
-  onEmptyClick,
 }: {
-  cell: Cell
-  colSpan: number
-  freeIsHighlighted: boolean
+  entry: BusyEntry
+  style: React.CSSProperties
+  editable: boolean
   onBusyClick?: (entry: BusyEntry) => void
-  onEmptyClick?: (day: string, start: string, end: string) => void
 }) {
-  const editable = Boolean(onBusyClick || onEmptyClick)
-
-  if (cell.change) {
-    const cls = cell.change.changeType === 'SCHEDULED' ? 'change-scheduled' : 'change-cancelled'
-    return (
-      <td className={`grid-cell ${cls}`} colSpan={colSpan}>
-        <span className="course">{cell.change.courseId}</span>
-        <span className="tag">
-          {cell.change.changeType === 'SCHEDULED' ? 'Newly scheduled' : 'Cancelled'}
-        </span>
-      </td>
-    )
-  }
-
-  if (cell.busy.length > 0) {
-    return (
-      <td className="grid-cell busy" colSpan={colSpan}>
-        {cell.busy.map((b, i) => {
-          const color = courseColor(b.courseId)
-          const fullName = courseFullName(b.courseId)
-          const tooltipLines = [fullName ?? b.courseId, b.faculty ? `Taught by ${b.faculty}` : null]
-            .filter(Boolean)
-            .join('\n')
-          return (
-            <div
-              key={i}
-              className={`course-block${editable ? ' editable' : ''} has-tooltip`}
-              style={{ background: color.bg, borderLeftColor: color.accent }}
-              onClick={onBusyClick ? () => onBusyClick(b) : undefined}
-              data-tooltip={tooltipLines}
-            >
-              <div className="course-line">
-                <span className="course-line-left">
-                  <span className="course" style={{ color: color.text }}>
-                    {b.courseId}
-                    {b.sessionType && ` (${b.sessionType.toUpperCase()})`}
-                    {b.section && (
-                      <>
-                        <span className="section-dot">·</span>
-                        <span className="section-label">Sec {b.section}</span>
-                      </>
-                    )}
-                  </span>
-                </span>
-                {b.room && <span className="meta room">{b.room}</span>}
-              </div>
-            </div>
-          )
-        })}
-      </td>
-    )
-  }
-
+  const color = courseColor(b.courseId)
+  const fullName = courseFullName(b.courseId)
+  const tooltipLines = [fullName ?? b.courseId, b.faculty ? `Taught by ${b.faculty}` : null]
+    .filter(Boolean)
+    .join('\n')
   return (
-    <td
-      className={`grid-cell ${freeIsHighlighted ? 'free' : ''}${editable ? ' editable-empty' : ''}`}
-      colSpan={colSpan}
-      onClick={onEmptyClick ? () => onEmptyClick(cell.day, cell.start, cell.end) : undefined}
+    <div
+      className={`slot-item course-block${editable ? ' editable' : ''} has-tooltip`}
+      style={{ ...style, background: color.bg, borderLeftColor: color.accent }}
+      onClick={onBusyClick ? () => onBusyClick(b) : undefined}
+      data-tooltip={tooltipLines}
     >
-      {editable && <span className="add-hint">+</span>}
-    </td>
+      <div className="course-line">
+        <span className="course-line-left">
+          <span className="course" style={{ color: color.text }}>
+            {b.courseId}
+            {b.sessionType && ` (${b.sessionType.toUpperCase()})`}
+            {b.section && (
+              <>
+                <span className="section-dot">·</span>
+                <span className="section-label">Sec {b.section}</span>
+              </>
+            )}
+          </span>
+        </span>
+        {b.room && <span className="meta room">{b.room}</span>}
+      </div>
+    </div>
   )
 }
