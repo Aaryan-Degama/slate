@@ -25,10 +25,18 @@ REGION = 'ap-south-1'
 # (basket, day, startTime, endTime) — read directly off the real grid
 # (BTech3rdSem sheet): HSMC at TUE row5/col11 and FRI row11/col11,
 # MDM-1 at WED row7/col11 and FRI row11/col9.
+#
+# The TUE/WED/FRI "col11" (K) occurrences are all merged cells spanning
+# K:L (two genuinely separate 1-hour header columns here -- confirmed by
+# checking the header row itself, which does NOT merge K:L on this
+# sheet), so those are real 2-hour blocks (16:30-18:30), not 1-hour --
+# originally mis-extracted as 1 hour by reading columns independently
+# without checking merge spans. Caught by a user cross-checking their
+# own real timetable against the rendered grid.
 BLOCKS = [
-    ('HSMC', 'TUE', '16:30', '17:30'),
-    ('HSMC', 'FRI', '16:30', '17:30'),
-    ('MDM-1', 'WED', '16:30', '17:30'),
+    ('HSMC', 'TUE', '16:30', '18:30'),
+    ('HSMC', 'FRI', '16:30', '18:30'),
+    ('MDM-1', 'WED', '16:30', '18:30'),
     ('MDM-1', 'FRI', '14:30', '15:30'),
 ]
 SECTIONS = ['A', 'B', 'C']

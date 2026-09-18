@@ -27,10 +27,20 @@ REGION = 'ap-south-1'
 
 # (label, day, startTime, endTime) -- read directly off the real grid
 # (BTech5thSem sheet).
+#
+# MON HI (H3:I4) and TUE MDM-3 16:30 (J5:L6) are merges spanning two
+# genuinely separate 1-hour header columns each (confirmed against the
+# header row, which does not merge H:I or J:K here), so both are real
+# 2-hour blocks -- originally mis-extracted as 1 hour by reading columns
+# independently without checking merge spans. Caught by a user
+# cross-checking their own real timetable against the rendered grid.
+# WED CE (K7:L8) and FRI MDM-3 (single-column row-merge) are correctly
+# 1 hour: the header itself merges K:L on this sheet, so that merge is
+# just following the header layout, not a real 2-hour class.
 BLOCKS = [
-    ('HI', 'MON', '14:30', '15:30'),
+    ('HI', 'MON', '14:30', '16:30'),
     ('MDM-3', 'TUE', '09:00', '10:00'),
-    ('MDM-3', 'TUE', '16:30', '17:30'),
+    ('MDM-3', 'TUE', '16:30', '18:30'),
     ('MDM-3', 'FRI', '15:30', '16:30'),
     ('CE', 'WED', '17:30', '18:30'),
 ]
