@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
+import { parseTimetable } from '../functions/parse-timetable/resource';
 
 /**
  * Slate's data model (see CLAUDE.md §4).
@@ -130,6 +131,16 @@ const schema = a.schema({
       section: a.string().required(),
     })
     .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
+
+  // Admin upload: parses a timetable file already uploaded to S3 and
+  // returns proposed rows + validation issues per sheet (JSON string).
+  // Read-only; the admin applies the result from the app.
+  parseTimetable: a
+    .query()
+    .arguments({ key: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(parseTimetable))
+    .authorization((allow) => [allow.authenticated()]),
 
   // Per-student course registration -- currently only meaningful for
   // electives, since core courses are already implied by section

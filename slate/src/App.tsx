@@ -5,11 +5,12 @@ import StudentDashboard from './StudentDashboard'
 import TeacherDashboard from './TeacherDashboard'
 import AdminDashboard from './AdminDashboard'
 import AdminTimetableEditor from './AdminTimetableEditor'
+import AdminUpload from './AdminUpload'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
 type FacultyTab = 'teaching' | 'new-request'
-type AdminTab = 'data' | 'edit'
+type AdminTab = 'data' | 'upload' | 'edit'
 
 function AppShell({
   profile,
@@ -108,6 +109,12 @@ function App() {
                   onClick: () => setAdminTab('data'),
                 },
                 {
+                  key: 'upload',
+                  label: 'Upload Timetable',
+                  active: adminTab === 'upload',
+                  onClick: () => setAdminTab('upload'),
+                },
+                {
                   key: 'edit',
                   label: 'Correct Timetable',
                   active: adminTab === 'edit',
@@ -116,6 +123,7 @@ function App() {
               ]}
             >
               {adminTab === 'data' && <AdminDashboard />}
+              {adminTab === 'upload' && <AdminUpload onDone={() => setAdminTab('edit')} />}
               {adminTab === 'edit' && <AdminTimetableEditor />}
             </AppShell>
           )
