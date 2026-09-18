@@ -103,7 +103,7 @@ function GridCell({
                     {b.section && (
                       <>
                         <span className="section-dot">·</span>
-                        <span className="section-label">{b.section}</span>
+                        <span className="section-label">Sec {b.section}</span>
                       </>
                     )}
                   </span>
