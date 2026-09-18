@@ -16,20 +16,20 @@ export default function TimetableGrid({
       <thead>
         <tr>
           <th></th>
-          {DAYS.map((d) => (
-            <th key={d}>{d}</th>
+          {HOURS.map((hour) => (
+            <th key={hour.start}>
+              {hour.start}–{hour.end}
+            </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {HOURS.map((hour, hi) => (
-          <tr key={hour.start}>
-            <th className="hour-label">
-              {hour.start}–{hour.end}
-            </th>
-            {DAYS.map((day, di) => {
+        {DAYS.map((day, di) => (
+          <tr key={day}>
+            <th className="hour-label">{day}</th>
+            {HOURS.map((hour, hi) => {
               const cell = grid[di][hi]
-              return <GridCell key={day} cell={cell} freeIsHighlighted={freeIsHighlighted} />
+              return <GridCell key={hour.start} cell={cell} freeIsHighlighted={freeIsHighlighted} />
             })}
           </tr>
         ))}
