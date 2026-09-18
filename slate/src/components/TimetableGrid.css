@@ -1,0 +1,70 @@
+.timetable-grid {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.timetable-grid th,
+.timetable-grid td {
+  border: 1px solid #333;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 110px;
+}
+
+.hour-label {
+  white-space: nowrap;
+  font-weight: 600;
+  background: #1a1a1a;
+}
+
+.grid-cell {
+  height: 48px;
+}
+
+.grid-cell.free {
+  background: #1e5c34;
+}
+
+.grid-cell.busy {
+  background: #2a2a2a;
+}
+
+.grid-cell.change-scheduled {
+  background: #2e7d32;
+  color: #fff;
+  animation: pulse 1.4s ease-in-out 2;
+}
+
+.grid-cell.change-cancelled {
+  background: #7d2e2e;
+  color: #fff;
+  text-decoration: line-through;
+}
+
+.course-block {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 4px;
+}
+
+.course {
+  font-weight: 700;
+}
+
+.meta,
+.tag {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(46, 125, 50, 0);
+  }
+}

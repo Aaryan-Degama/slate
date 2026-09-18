@@ -10,11 +10,18 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 const schema = a.schema({
   Role: a.enum(['FACULTY', 'STUDENT']),
   RequestStatus: a.enum(['PROPOSED', 'CONFIRMED']),
+  ChangeType: a.enum(['SCHEDULED', 'CANCELLED']),
 
   User: a
     .model({
       email: a.string().required(),
       role: a.ref('Role').required(),
+      // One-time identity link (CLAUDE.md §4a) — points at an existing
+      // real section/faculty name already in TimetableSlot, never new
+      // schedule data. { program, branch, section } for students.
+      linkedSection: a.json(),
+      // Real faculty display name as it appears in TimetableSlot.faculty.
+      linkedFacultyName: a.string(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.owner()]),
 
@@ -32,6 +39,9 @@ const schema = a.schema({
       endTime: a.string().required(),
       courseId: a.string().required(),
       room: a.string(),
+      // Real faculty name from the course-legend table in the source
+      // spreadsheet (added Day 2 for the teacher dashboard).
+      faculty: a.string(),
     })
     .authorization((allow) => [allow.authenticated().to(['read'])]),
 
@@ -47,12 +57,13 @@ const schema = a.schema({
       // { earliestTime?, latestTime?, allowedDays?, minDurationMins? }
       constraints: a.json(),
     })
-    // TODO (Day 3): the PROPOSED -> CONFIRMED transition is the one
-    // action CLAUDE.md gates to role: FACULTY via Cedar. Plain model
-    // 'update' access can't express that role check, so this will move
-    // to a custom Confirm & Notify mutation/Lambda once that's built.
-    // Leaving 'update' open here for now would let anyone confirm.
-    .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
+    // TODO (Day 3): the PROPOSED -> CONFIRMED transition (via 'update') is
+    // the one action CLAUDE.md gates to role: FACULTY via Cedar. Plain
+    // model authorization can't express that role check, so this is open
+    // to any authenticated user for now -- same acknowledged gap as
+    // ScheduleChange.create below. Moving both to a role-checked custom
+    // mutation once Cedar is wired up.
+    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update'])]),
 
   // Written only by the slot-finding Lambda; the app only ever reads these.
   ProposedSlot: a
@@ -68,6 +79,28 @@ const schema = a.schema({
       blockingSection: a.json(),
     })
     .authorization((allow) => [allow.authenticated().to(['read'])]),
+
+  // Replaces the SES email (see CLAUDE.md §2/§3): confirming a slot writes
+  // one of these, and the student/teacher dashboards for the affected
+  // section render it as a highlight on their own timetable grid.
+  ScheduleChange: a
+    .model({
+      relatedRequestId: a.id().required(),
+      program: a.string().required(),
+      branch: a.string().required(),
+      section: a.string().required(),
+      day: a.string().required(),
+      startTime: a.string().required(),
+      endTime: a.string().required(),
+      courseId: a.string().required(),
+      room: a.string(),
+      changeType: a.ref('ChangeType').required(),
+    })
+    // TODO (Day 3): same gap as SlotRequest above — creating a
+    // ScheduleChange is the actual "Confirm" action CLAUDE.md gates to
+    // role: FACULTY via Cedar. Moving to a role-checked custom mutation
+    // once that's built; open to any authenticated user for now.
+    .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -40,6 +40,31 @@ ENTRY_RE = re.compile(
     r'([A-Za-z.]+)\s*\(([A-Za-z]+)\)\s*-\s*Sec\s*([A-Za-z0-9,\s]+?)\s*\(([^)]+)\)'
 )
 
+FACULTY_ROW_RE = re.compile(r'([^,()]+?)\s*\(([^)]+)\)')
+
+
+def parse_faculty_legend(ws, code_col=3, faculty_col=8, start_row=15, end_row=32):
+    """courseId -> {section: facultyName}, from the legend table below the
+    grid (e.g. row 15: 'TOC' | 'Dr. Navjot Singh (A, B1), Dr. Triloki Pant
+    (B2, C)'). Only handles the clean 'Name (Sections)' format the core
+    course rows use — elective rows use inconsistent formats (some say
+    '(Coordinator)', some have no parens at all) and aren't needed here
+    since we don't persist per-option elective TimetableSlot rows."""
+    result = {}
+    for r in range(start_row, end_row):
+        code = ws.cell(row=r, column=code_col).value
+        faculty_text = ws.cell(row=r, column=faculty_col).value
+        if not code or not faculty_text:
+            continue
+        by_section = {}
+        for name, secs in FACULTY_ROW_RE.findall(faculty_text):
+            for sec in re.split(r'[,\s]+', secs.strip()):
+                if re.fullmatch(r'[A-Za-z][0-9]?', sec):  # e.g. A, B1, C
+                    by_section[sec] = name.strip()
+        if by_section:
+            result[code.strip()] = by_section
+    return result
+
 
 def extract(ws, max_row=40):
     day_rows = []
@@ -81,6 +106,7 @@ def main():
     wb = openpyxl.load_workbook(SOURCE, data_only=True)
     ws = wb['BTech3rdSem']
     entries = extract(ws)
+    faculty_lookup = parse_faculty_legend(ws)
 
     ddb = boto3.resource('dynamodb', region_name=REGION)
     table = ddb.Table(TABLE_NAME)
@@ -103,6 +129,9 @@ def main():
                 'createdAt': '2026-09-18T00:00:00.000Z',
                 'updatedAt': '2026-09-18T00:00:00.000Z',
             }
+            faculty = faculty_lookup.get(e['courseId'], {}).get(e['section'])
+            if faculty:
+                item['faculty'] = faculty
             batch.put_item(Item=item)
             written += 1
 
