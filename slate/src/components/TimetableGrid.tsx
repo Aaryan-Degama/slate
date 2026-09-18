@@ -1,5 +1,6 @@
 import { DAYS, HOURS, type Cell, type BusyEntry } from '../lib/grid'
 import { courseColor } from '../lib/courseColor'
+import { courseFullName } from '../lib/courseNames'
 import './TimetableGrid.css'
 
 export default function TimetableGrid({
@@ -83,12 +84,17 @@ function GridCell({
       <td className="grid-cell busy">
         {cell.busy.map((b, i) => {
           const color = courseColor(b.courseId)
+          const fullName = courseFullName(b.courseId)
+          const tooltipLines = [fullName ?? b.courseId, b.faculty ? `Taught by ${b.faculty}` : null]
+            .filter(Boolean)
+            .join('\n')
           return (
             <div
               key={i}
-              className={`course-block${editable ? ' editable' : ''}`}
+              className={`course-block${editable ? ' editable' : ''} has-tooltip`}
               style={{ background: color.bg, borderLeftColor: color.accent }}
               onClick={onBusyClick ? () => onBusyClick(b) : undefined}
+              data-tooltip={tooltipLines}
             >
               <div className="course-line">
                 <span className="course" style={{ color: color.text }}>
