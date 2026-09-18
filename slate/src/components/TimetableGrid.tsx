@@ -97,15 +97,17 @@ function GridCell({
               data-tooltip={tooltipLines}
             >
               <div className="course-line">
-                <span className="course" style={{ color: color.text }}>
-                  {b.courseId}
-                </span>
-                {b.section && (
-                  <span className="section-badge" style={{ background: color.accent }}>
-                    {b.section}
+                <span className="course-line-left">
+                  <span className="course" style={{ color: color.text }}>
+                    {b.courseId}
                   </span>
-                )}
-                {b.room && <span className="meta">{b.room}</span>}
+                  {b.section && (
+                    <span className="section-badge" style={{ color: color.accent }}>
+                      {b.section}
+                    </span>
+                  )}
+                </span>
+                {b.room && <span className="meta room">{b.room}</span>}
               </div>
             </div>
           )
