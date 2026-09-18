@@ -1,4 +1,5 @@
 import { DAYS, HOURS, type Cell, type BusyEntry } from '../lib/grid'
+import { courseColor } from '../lib/courseColor'
 import './TimetableGrid.css'
 
 export default function TimetableGrid({
@@ -80,19 +81,25 @@ function GridCell({
   if (cell.busy.length > 0) {
     return (
       <td className="grid-cell busy">
-        {cell.busy.map((b, i) => (
-          <div
-            key={i}
-            className={`course-block${editable ? ' editable' : ''}`}
-            onClick={onBusyClick ? () => onBusyClick(b) : undefined}
-          >
-            <div className="course-line">
-              <span className="course">{b.courseId}</span>
-              {b.section && <span className="meta">Sec {b.section}</span>}
-              {b.room && <span className="meta">{b.room}</span>}
+        {cell.busy.map((b, i) => {
+          const color = courseColor(b.courseId)
+          return (
+            <div
+              key={i}
+              className={`course-block${editable ? ' editable' : ''}`}
+              style={{ background: color.bg, borderLeftColor: color.accent }}
+              onClick={onBusyClick ? () => onBusyClick(b) : undefined}
+            >
+              <div className="course-line">
+                <span className="course" style={{ color: color.text }}>
+                  {b.courseId}
+                </span>
+                {b.section && <span className="meta">Sec {b.section}</span>}
+                {b.room && <span className="meta">{b.room}</span>}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </td>
     )
   }
