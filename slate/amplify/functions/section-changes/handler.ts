@@ -73,13 +73,21 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const weekdayOf = (date: string) => DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()]
 /** Today in IST, as YYYY-MM-DD. */
 const todayIst = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10)
+const addDays = (date: string, n: number) => new Date(new Date(`${date}T00:00:00Z`).getTime() + n * 86400e3).toISOString().slice(0, 10)
+/** Monday of `date`'s week (Sat/Sun roll forward, as in src/lib/grid.ts mondayOf). */
+function mondayOf(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`).getUTCDay()
+  return addDays(date, d === 0 ? 1 : d === 6 ? 2 : 1 - d)
+}
+/** Changes are only for this week and next: from today to next week's Friday. */
 function checkDate(date: unknown): string {
   if (typeof date !== 'string' || !DATE_RE.test(date)) throw new Error('Pick a date.')
-  if (date < todayIst()) throw new Error("That date has already passed.")
-  const limit = new Date(Date.now() + (5.5 * 3600e3) + 120 * 86400e3).toISOString().slice(0, 10)
-  if (date > limit) throw new Error('That date is too far ahead.')
+  if (date < todayIst()) throw new Error('That date has already passed.')
+  if (date > addDays(mondayOf(todayIst()), 11)) throw new Error('Changes can only be made for this week and next.')
   return date
 }
+/** TTL (epoch seconds): the Monday after the change's week, when it stops being shown. */
+const expiresAt = (date: string) => Math.floor(new Date(`${addDays(mondayOf(date), 7)}T00:00:00+05:30`).getTime() / 1000)
 
 // ---------------------------------------------------------------- Cedar
 type Ctx = { identity: Identity; email: string; mine: Section | null; reps: Row[]; principal: Entity }
@@ -144,6 +152,7 @@ function newRow(ctx: Ctx, groupId: string, fields: Row): Row {
     __typename: 'ScheduleChange',
     groupId,
     ...fields,
+    expiresAt: expiresAt(String(fields.date)),
     changedBy: ctx.email,
     changedBySub: ctx.identity.sub,
     changedBySection: ctx.mine ? `${ctx.mine.section}` : null,

@@ -13,12 +13,13 @@ import {
   KIND_LABEL,
   mondayOf,
   personLabel,
-  removes,
   todayIst,
   type BusyEntry,
   type ChangeEntry,
 } from './lib/grid'
 import { addExtra, cancelOccurrence, claimCr, sectionKey, undoChange, type ClassRep } from './lib/classReps'
+import { toActions, type Action } from './lib/changes'
+import ActionLine from './components/ActionLine'
 import type { Profile } from './lib/useMyProfile'
 import { resolveSectionFromEmail } from './lib/rollLookup'
 import { listAll } from './lib/listAll'
@@ -38,7 +39,15 @@ type ScheduleChangeRow = ChangeEntry & {
 }
 const listScheduleChanges = () => listAll<ScheduleChangeRow>(client.models.ScheduleChange.list)
 
-type RepProps = { userId: string; reps: ClassRep[] | null; reloadReps: () => Promise<void>; repsError?: string }
+type RepProps = {
+  userId: string
+  reps: ClassRep[] | null
+  reloadReps: () => Promise<void>
+  repsError?: string
+  /** "What changed" feed: when the student last marked it seen. */
+  seenAt: string | null
+  markSeen: () => Promise<void>
+}
 
 export default function StudentDashboard({
   profile,
@@ -156,6 +165,8 @@ function MyTimetable({
   reps,
   reloadReps,
   repsError,
+  seenAt,
+  markSeen,
 }: { section: SectionRef; email: string } & RepProps) {
   const [data, setData] = useState<{ batch: TimetableSlotRow[]; slots: TimetableSlotRow[]; changes: ScheduleChangeRow[] } | null>(null)
   const [monday, setMonday] = useState(() => mondayOf(todayIst()))
@@ -170,6 +181,7 @@ function MyTimetable({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [onlyMine, setOnlyMine] = useState(false)
 
   const load = useCallback(() => {
     // The linked profile may predate a B1/B2 upload, so re-resolve the
@@ -236,16 +248,16 @@ function MyTimetable({
     return reach(rows.filter((r) => !profs.size || profs.has(r.faculty)).map((r) => r.section))
   }
 
-  // History: one line per action (a change for B and B1 is one action).
-  const seen = new Set<string>()
-  const history = [...data.changes]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .filter((c) => {
-      const k = `${c.groupId}|${c.kind}`
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
-    })
+  // Only this week and next matter (older changes are deleted by the
+  // table's TTL). One line per action: a change for B and B1, or both
+  // halves of a move, is one action. New = made by someone else since the
+  // student last marked the list seen.
+  const thisMonday = mondayOf(today)
+  const nextMonday = addDays(thisMonday, 7)
+  const actions = toActions(data.changes).filter((x) => x.date >= thisMonday && x.date <= addDays(nextMonday, 4))
+  const isNew = (x: Action) => !x.undone && x.changedBy !== email && (!seenAt || x.createdAt > seenAt)
+  const newCount = actions.filter(isNew).length
+  const shown = onlyMine ? actions.filter((x) => x.changedBy === email) : actions
 
   const act = async (fn: () => Promise<void>) => {
     setBusy(true)
@@ -288,6 +300,40 @@ function MyTimetable({
         </p>
       )}
 
+      <section className="feed">
+        <div className="feed-head">
+          <h2>What changed this week and next{newCount ? ` · ${newCount} new` : ''}</h2>
+          {newCount > 0 && (
+            <button type="button" onClick={() => markSeen()}>
+              Mark as seen
+            </button>
+          )}
+          {isCr && actions.length > 0 && (
+            <label className="day-toggle">
+              <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
+              Only ones I made
+            </label>
+          )}
+        </div>
+        {shown.length === 0 ? (
+          <p className="meta">
+            {onlyMine ? "You haven't made any changes for these two weeks." : 'No changes. Your regular timetable holds.'}
+          </p>
+        ) : (
+          <ul className="change-history">
+            {shown.map((x) => (
+              <ActionLine key={x.groupId} action={x} isNew={isNew(x)}>
+                {isCr && !x.undone && x.date >= today && (
+                  <button type="button" disabled={busy} onClick={() => act(() => undoChange(x.groupId))}>
+                    Undo
+                  </button>
+                )}
+              </ActionLine>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <div className={`cr-bar${isCr ? ' is-cr' : ''}`}>
         {isCr ? (
           <span>
@@ -309,21 +355,13 @@ function MyTimetable({
         )}
       </div>
 
-      <div className="week-nav">
-        <button type="button" onClick={() => setMonday((m) => addDays(m, -7))}>
-          ← Previous week
+      <div className="week-nav option-list">
+        <button type="button" className={monday === thisMonday ? 'active' : ''} onClick={() => setMonday(thisMonday)}>
+          This week · {formatDate(thisMonday)}
         </button>
-        <strong>
-          {formatDate(monday)} – {formatDate(addDays(monday, 4))}
-        </strong>
-        <button type="button" onClick={() => setMonday((m) => addDays(m, 7))}>
-          Next week →
+        <button type="button" className={monday === nextMonday ? 'active' : ''} onClick={() => setMonday(nextMonday)}>
+          Next week · {formatDate(nextMonday)}
         </button>
-        {monday !== mondayOf(today) && (
-          <button type="button" onClick={() => setMonday(mondayOf(today))}>
-            This week
-          </button>
-        )}
       </div>
 
       {panel && (
@@ -415,32 +453,7 @@ function MyTimetable({
         onChangeClick={isCr && !showFree ? (change) => open({ kind: 'change', change }, change.date) : undefined}
       />
 
-      <h2>Changes to my timetable</h2>
-      {history.length === 0 ? (
-        <p className="meta">No changes yet. Anything a CR cancels, adds or moves shows up here with their name.</p>
-      ) : (
-        <ul className="change-history">
-          {history.map((c) => (
-            <li key={c.id} className={c.undoneAt ? 'undone' : ''}>
-              <span className={`kind ${removes(c.kind) ? 'cancelled' : 'added'}`}>{KIND_LABEL[c.kind]}</span>
-              <span>
-                <strong>{c.courseId}</strong> · {formatDate(c.date)} {c.startTime}–{c.endTime}
-                {c.room ? ` · ${c.room}` : ''}
-              </span>
-              <span className="meta">
-                by {personLabel(c.changedBy)}
-                {c.changedBySection ? ` (Sec ${c.changedBySection})` : ''} · {new Date(c.createdAt).toLocaleString()}
-                {c.undoneAt && ` · undone by ${personLabel(c.undoneBy)}`}
-              </span>
-              {isCr && !c.undoneAt && c.date >= today && (
-                <button type="button" disabled={busy} onClick={() => act(() => undoChange(c.groupId!))}>
-                  Undo
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   )
 }
+

@@ -7,12 +7,13 @@ import AdminTimetableEditor from './AdminTimetableEditor'
 import AdminUpload from './AdminUpload'
 import AdminStudents from './AdminStudents'
 import AdminClassReps from './AdminClassReps'
+import AdminActivity from './AdminActivity'
 import { useClassReps } from './lib/classReps'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
 type StudentTab = 'timetable' | 'find'
-type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps'
+type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps' | 'activity'
 
 function AppShell({
   profile,
@@ -81,7 +82,7 @@ function App() {
 function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) {
   const [studentTab, setStudentTab] = useState<StudentTab>('timetable')
   const [adminTab, setAdminTab] = useState<AdminTab>('data')
-  const { profile, loading, error, linkSection } = useMyProfile(userId)
+  const { profile, loading, error, linkSection, markChangesSeen } = useMyProfile(userId)
   const { reps, reload: reloadReps, error: repsError } = useClassReps()
 
   if (loading || !profile) {
@@ -139,6 +140,12 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
             active: adminTab === 'reps',
             onClick: () => setAdminTab('reps'),
           },
+          {
+            key: 'activity',
+            label: 'Activity',
+            active: adminTab === 'activity',
+            onClick: () => setAdminTab('activity'),
+          },
         ]}
       >
         {adminTab === 'data' && <AdminDashboard onOpenStudents={() => setAdminTab('students')} />}
@@ -146,6 +153,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
         {adminTab === 'students' && <AdminStudents />}
         {adminTab === 'edit' && <AdminTimetableEditor />}
         {adminTab === 'reps' && <AdminClassReps />}
+        {adminTab === 'activity' && <AdminActivity />}
       </AppShell>
     )
   }
@@ -186,6 +194,8 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           reps={reps}
           reloadReps={reloadReps}
           repsError={repsError}
+          seenAt={profile.changesSeenAt}
+          markSeen={markChangesSeen}
         />
       )}
       {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}

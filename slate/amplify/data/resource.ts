@@ -25,8 +25,10 @@ const schema = a.schema({
       // real section/faculty name already in TimetableSlot, never new
       // schedule data. { program, branch, section } for students.
       linkedSection: a.json(),
-      // Real faculty display name as it appears in TimetableSlot.faculty.
-      linkedFacultyName: a.string(),
+      // When the student last looked at their "What changed" feed; changes
+      // made after this are shown as new (kept here so it follows them
+      // across devices).
+      changesSeenAt: a.datetime(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.owner()]),
 

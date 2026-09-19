@@ -53,3 +53,11 @@ for (const [model, env, write] of [
   else tables[model].grantReadData(changesFn);
   backend.sectionChanges.addEnvironment(env, tables[model].tableName);
 }
+
+// Changes only matter for this week and next (CLAUDE.md §2): each row
+// carries expiresAt (epoch seconds, the Monday after its week) and
+// DynamoDB's time-to-live deletes it after that, at no cost.
+backend.data.resources.cfnResources.amplifyDynamoDbTables['ScheduleChange'].timeToLiveAttribute = {
+  attributeName: 'expiresAt',
+  enabled: true,
+};

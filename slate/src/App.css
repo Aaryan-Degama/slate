@@ -525,3 +525,20 @@ button.danger {
   gap: 10px;
   margin: 0 0 12px;
 }
+
+.feed {
+  margin: 0 0 16px;
+}
+
+.feed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.change-history li.new {
+  border-color: var(--free);
+  background: var(--free-bg);
+}

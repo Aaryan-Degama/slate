@@ -44,7 +44,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 
 ### Who sees what
 
-**Student:** their week, date-based with prev/next; cancelled occurrences struck through and extras marked, each with who made it; a "What changed" feed for the next 14 days (unseen highlighted); their section card showing the current CR, or **Become CR** if there's none. Electives show only if registered (admin upload); without registration data the whole basket shows, labelled as such.
+**Student:** **this week and next week only** (no older history); cancelled occurrences struck through and extras marked, each with who made it; one "What changed this week and next" list (new ones highlighted until marked seen); their section card showing the current CR, or **Become CR** if there's none. Electives show only if registered (admin upload); without registration data the whole basket shows, labelled as such.
 
 **CR** (a student who claimed their section; first to claim, admin can revoke): everything a student sees, plus **Make a change**:
 - **Cancel** an occurrence.
@@ -52,7 +52,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 - **Move**: an occurrence to a finder-chosen slot.
 - **My changes**, each with Undo.
 
-**Admin:** upload timetables, student lists and course registrations; correct timetable data; list and revoke CRs; an activity log of every change across batches.
+**Admin:** upload timetables, student lists and course registrations; correct timetable data; list and revoke CRs; an activity log of every change across batches for this week and next.
 
 ### Non-goals — do NOT build these
 
@@ -110,7 +110,8 @@ ScheduleChange  one row per affected section:
                 MOVED_FROM | MOVED_TO), date (YYYY-MM-DD), program, branch,
                 semester, section, startTime, endTime, courseId, room,
                 faculty, relatedSlotId, changedBy, changedBySection,
-                undoneBy, undoneAt
+                undoneBy, undoneAt, expiresAt (TTL: deleted the Monday
+                after its week -- only this week and next are ever shown)
 ```
 
 All writes to `ScheduleChange` and `ClassRep` go through the `section-changes` Lambda, where the Cedar policy (`amplify/functions/section-changes/policy.cedar`) decides. The server derives a caller's section from their verified email and a course's sections from `TimetableSlot`; it never trusts sections sent by the client.
