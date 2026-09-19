@@ -2,7 +2,7 @@
 
 **Find a free hour for a makeup class across several sections, in seconds instead of two days of WhatsApp polls.**
 
-Live: **https://main.dosqfo1xoqa7l.amplifyapp.com** (sign-in is limited to `@iiita.ac.in` accounts)
+Live: **https://main.d1hpc7rjskshni.amplifyapp.com** (sign-in is limited to `@iiita.ac.in` accounts)
 
 Built for **First Commit** (WeMakeDevs × AWS), Sept 17–20, 2026. Ship It track.
 
