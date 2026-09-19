@@ -114,7 +114,8 @@ export default function TimetableGrid({
                   }}
                 >
                   {row.map((cell, hi) => {
-                    const empty = cell.busy.length === 0 && !cell.change
+                    // A cancelled class leaves its hour free (it stays visible, struck through).
+                    const empty = cell.busy.every((b) => b.cancelled) && !cell.change
                     return (
                       <div
                         key={`bg-${cell.start}`}

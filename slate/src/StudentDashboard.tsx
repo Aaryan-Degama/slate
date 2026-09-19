@@ -9,7 +9,6 @@ import {
   DAYS,
   forWeek,
   formatDate,
-  freeAcrossAll,
   KIND_LABEL,
   mondayOf,
   personLabel,
@@ -170,7 +169,6 @@ function MyTimetable({
 }: { section: SectionRef; email: string } & RepProps) {
   const [data, setData] = useState<{ batch: TimetableSlotRow[]; slots: TimetableSlotRow[]; changes: ScheduleChangeRow[] } | null>(null)
   const [monday, setMonday] = useState(() => mondayOf(todayIst()))
-  const [showFree, setShowFree] = useState(false)
   const [groups, setGroups] = useState<{ section: string; subSection?: string; unknownSplit: string[] }>({
     section: section.section,
     unknownSplit: [],
@@ -437,20 +435,17 @@ function MyTimetable({
       )}
       {error && <p className="error">{error}</p>}
 
-      <button type="button" onClick={() => setShowFree((v) => !v)}>
-        {showFree ? 'Show my classes' : 'Show free hours for my class'}
-      </button>
       <TimetableGrid
-        grid={showFree ? freeAcrossAll([data.slots]) : grid}
-        freeIsHighlighted={showFree}
+        grid={grid}
+        freeIsHighlighted
         dayLabels={dayLabels}
         onEmptyClick={
           isCr ? (day, start, end) => open({ kind: 'add', date: dateIn(monday, day), start, end }, dateIn(monday, day)) : undefined
         }
         onBusyClick={
-          isCr && !showFree ? (entry) => open({ kind: 'class', entry, date: dateIn(monday, entry.day) }, dateIn(monday, entry.day)) : undefined
+          isCr ? (entry) => open({ kind: 'class', entry, date: dateIn(monday, entry.day) }, dateIn(monday, entry.day)) : undefined
         }
-        onChangeClick={isCr && !showFree ? (change) => open({ kind: 'change', change }, change.date) : undefined}
+        onChangeClick={isCr ? (change) => open({ kind: 'change', change }, change.date) : undefined}
       />
 
     </div>
