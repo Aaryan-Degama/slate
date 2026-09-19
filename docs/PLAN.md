@@ -34,7 +34,7 @@ This plan redefines what each person needs and sees, then orders the work so eve
   - **Extra**: a one-off class on a date.
   - **Moved**: a cancelled occurrence plus an extra class, linked together.
 
-  Each change applies to all sections of that course in the batch, and records **who** (CR roll number and section) and **when**.
+  Each change reaches the sections of that course **taught by the same professor** as the CR's section (IML in IT Sem 5 has a different professor per section; IVP's Prof. Vrijendra Singh teaches B2 and C), and records **who** (CR roll number and section) and **when**.
 - **Effective timetable for a date** = that weekday's regular classes, minus cancellations on that date, plus extra classes on that date. Every view computes this; nothing else is stored.
 
 ---
@@ -57,7 +57,7 @@ Students **don't** get Find a Slot; it's a CR tool. That removes a confusing scr
 Needs: "The professor told me X. Record it quickly and correctly for everyone in the batch."
 Everything a student sees, plus one **Make a change** entry point with three actions:
 1. **Cancel a class**: pick an upcoming occurrence from their own week, then confirm. The confirm screen lists every section it affects (e.g. "IML (L), Mon 22 Sep 09:00 · Sec A, B, C").
-2. **Extra class**: pick a **course** from the batch; its sections are pre-selected, and the CR can deselect any.
+2. **Extra class**: pick a **course** from the batch; the sections its professor teaches are pre-selected, and the CR can deselect any.
    - Choose a week or dates, length and time window, then **find slots**. Each result is a *date* + time + free room + reason, ranked as today.
    - The finder avoids **every affected section's effective classes**, the **batch's electives**, and **the course professor's other classes in any batch**.
    - If no slot works, the blocking explanation can name a section *or* the professor ("Prof. X teaches CS301 to ECE then").
@@ -77,7 +77,7 @@ Needs: "Keep the data right and keep CRs accountable."
 ## Rules (Cedar, `amplify/functions/section-changes/policy.cedar`)
 
 - **ClaimCr**: principal's verified section == resource section, and the section has no CR. (Unchanged.)
-- **Cancel / Extra / Move** on a *course in a batch*: the principal is the CR of one of the course's sections in that batch. The resource carries `sections` (the set of CR-able section keys taking the course), and the policy checks `resource.crs.contains(principal)`.
+- **Cancel / Move** an occurrence: the principal is the CR of a section in that class. **Extra**: the CR of a section the course's professor teaches. The resource carries `sections` (the set of CR-able section keys taking the course), and the policy checks `resource.crs.contains(principal)`.
 - **Undo** a change: the CR who made it, or the current CR of any section it affects.
 - **Admin**: everything.
 - The server always recomputes the affected sections from `TimetableSlot` and never trusts a section list sent by the client.

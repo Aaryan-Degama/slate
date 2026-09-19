@@ -39,7 +39,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 - **Section**: A, B, C, with sub-groups B1/B2 belonging to B. A student's section comes from their roll number (admin-uploaded student lists / roll ranges), never from their own choice.
 - **Regular class**: a weekly `TimetableSlot` row, ingested, read-only except admin corrections.
 - **Occurrence**: a regular class on a specific date.
-- **Change** (always dated): **Cancelled** (an occurrence called off), **Extra** (a one-off class), or **Moved** (a linked cancel + extra). A change applies to every section of that course in the batch, and records who made it (CR roll number and section) and when. Undo keeps the record, marked "undone by …".
+- **Change** (always dated): **Cancelled** (an occurrence called off), **Extra** (a one-off class), or **Moved** (a linked cancel + extra). A change reaches the sections of that course taught by the same professor as the CR's section (a course can have a different professor per section: IML in IT Sem 5 has three), and records who made it (CR roll number and section) and when. Undo keeps the record, marked "undone by …".
 - **Effective timetable** for a date = regular classes that weekday − cancellations that date + extras that date. Computed, never stored.
 
 ### Who sees what
@@ -48,7 +48,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 
 **CR** (a student who claimed their section; first to claim, admin can revoke): everything a student sees, plus **Make a change**:
 - **Cancel** an occurrence.
-- **Extra class**: pick a course; its sections are pre-selected; the finder returns dated slots free for every affected section, the batch's electives, and the course professor (in any batch), with a free room and reasons, or explains who blocks it.
+- **Extra class**: pick a course; the sections its professor teaches are pre-selected; the finder returns dated slots free for every affected section, the batch's electives, and the course professor (in any batch), with a free room and reasons, or explains who blocks it.
 - **Move**: an occurrence to a finder-chosen slot.
 - **My changes**, each with Undo.
 
