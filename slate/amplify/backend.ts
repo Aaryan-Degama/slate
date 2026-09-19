@@ -39,8 +39,13 @@ for (const [model, env] of [
   backend.findSlots.addEnvironment(env, tables[model].tableName);
 }
 
-// confirm-slot reads the request and writes the confirmation.
+// confirm-slot reads the request (or class, and the caller's User row)
+// and writes the confirmation or cancellation.
 const confirmFn = backend.confirmSlot.resources.lambda;
+tables.TimetableSlot.grantReadData(confirmFn);
+tables.User.grantReadData(confirmFn);
+backend.confirmSlot.addEnvironment('TIMETABLE_SLOT_TABLE', tables.TimetableSlot.tableName);
+backend.confirmSlot.addEnvironment('USER_TABLE', tables.User.tableName);
 tables.SlotRequest.grantReadWriteData(confirmFn);
 tables.ScheduleChange.grantWriteData(confirmFn);
 backend.confirmSlot.addEnvironment('SLOT_REQUEST_TABLE', tables.SlotRequest.tableName);

@@ -36,6 +36,8 @@ export type BusyEntry = {
    * ingestion for easy per-section querying, then re-merged here for
    * anyone looking at multiple sections at once). */
   mergedIds?: string[];
+  /** A CANCELLED ScheduleChange matches this class. */
+  cancelled?: boolean;
 };
 
 export type ChangeEntry = {
@@ -44,6 +46,7 @@ export type ChangeEntry = {
   endTime: string;
   courseId: string;
   changeType: 'SCHEDULED' | 'CANCELLED';
+  section?: string;
 };
 
 export type Cell = {
@@ -66,7 +69,7 @@ const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
 function mergeSameClass(entries: BusyEntry[]): BusyEntry[] {
   const groups = new Map<string, BusyEntry[]>();
   for (const e of entries) {
-    const key = `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.room ?? ''}`;
+    const key = `${e.courseId}|${e.day}|${e.startTime}|${e.endTime}|${e.room ?? ''}|${e.cancelled ? 'x' : ''}`;
     const group = groups.get(key);
     if (group) group.push(e);
     else groups.set(key, [e]);
@@ -83,7 +86,22 @@ function mergeSameClass(entries: BusyEntry[]): BusyEntry[] {
   });
 }
 
-export function buildGrid(busy: BusyEntry[], changes: ChangeEntry[] = []): Cell[][] {
+/** Is this class the one a cancellation refers to? */
+const cancels = (c: ChangeEntry, b: BusyEntry) =>
+  c.changeType === 'CANCELLED' &&
+  c.day === b.day &&
+  c.courseId === b.courseId &&
+  overlaps(c.startTime, c.endTime, b.startTime, b.endTime) &&
+  (!c.section || !b.section || c.section === b.section);
+
+export function buildGrid(input: BusyEntry[], allChanges: ChangeEntry[] = []): Cell[][] {
+  // A cancellation marks the class itself (struck through) rather than
+  // taking over the cell the way a newly scheduled session does.
+  const cancellations = allChanges.filter((c) => c.changeType === 'CANCELLED');
+  const changes = allChanges.filter((c) => c.changeType !== 'CANCELLED');
+  const busy = cancellations.length
+    ? input.map((b) => (cancellations.some((c) => cancels(c, b)) ? { ...b, cancelled: true } : b))
+    : input;
   return DAYS.map((day) =>
     HOURS.map(({ start, end }) => ({
       day,

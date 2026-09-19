@@ -292,3 +292,28 @@
     box-shadow: 0 0 0 6px rgba(26, 138, 74, 0);
   }
 }
+
+/* A regular class that's been cancelled: still visible, struck through. */
+.course-block.cancelled {
+  background: var(--bg-subtle) !important;
+  border-left-color: var(--danger) !important;
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.course-block.cancelled .course,
+.course-block.cancelled .room {
+  color: var(--text) !important;
+  text-decoration: line-through;
+}
+
+.cancelled-tag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

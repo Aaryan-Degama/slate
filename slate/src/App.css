@@ -414,3 +414,26 @@ table.admin-table th {
   gap: 6px;
   margin-bottom: 8px;
 }
+
+.cancel-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--danger-bg);
+  color: var(--text-h);
+}
+
+.cancel-panel span {
+  flex: 1 1 240px;
+}
+
+.cancel-panel button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}

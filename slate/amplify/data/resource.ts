@@ -180,6 +180,16 @@ const schema = a.schema({
     .handler(a.handler.function(confirmSlot))
     .authorization((allow) => [allow.authenticated()]),
 
+  // Cancel a regular class (every section of it, e.g. "Sec B2, C"). Same
+  // Lambda and policy file as confirmSlot; Cedar allows it only for the
+  // faculty member linked to that class's faculty name, or an admin.
+  cancelClass: a
+    .mutation()
+    .arguments({ slotIds: a.id().array().required() })
+    .returns(a.json())
+    .handler(a.handler.function(confirmSlot))
+    .authorization((allow) => [allow.authenticated()]),
+
   // Admin upload: parses a timetable file already uploaded to S3 and
   // returns proposed rows + validation issues per sheet (JSON string).
   // Read-only; the admin applies the result from the app.

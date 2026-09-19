@@ -113,7 +113,7 @@ export default function TimetableGrid({
                       <div
                         key={`bg-${cell.start}`}
                         className={`hour-bg${empty && freeIsHighlighted && !cell.outside ? ' free' : ''}${
-                          empty && editable ? ' editable-empty' : ''
+                          empty && onEmptyClick ? ' editable-empty' : ''
                         }`}
                         style={{ gridColumn: `${hi + 1}`, gridRow: `1 / ${lanes + 1}` }}
                         onClick={
@@ -122,7 +122,7 @@ export default function TimetableGrid({
                             : undefined
                         }
                       >
-                        {empty && editable && <span className="add-hint">+</span>}
+                        {empty && onEmptyClick && <span className="add-hint">+</span>}
                       </div>
                     )
                   })}
@@ -180,12 +180,16 @@ function CourseBlock({
 }) {
   const color = courseColor(b.courseId)
   const fullName = courseFullName(b.courseId)
-  const tooltipLines = [fullName ?? b.courseId, b.faculty ? `Taught by ${b.faculty}` : null]
+  const tooltipLines = [
+    fullName ?? b.courseId,
+    b.faculty ? `Taught by ${b.faculty}` : null,
+    b.cancelled ? 'Cancelled' : null,
+  ]
     .filter(Boolean)
     .join('\n')
   return (
     <div
-      className={`slot-item course-block${editable ? ' editable' : ''} has-tooltip`}
+      className={`slot-item course-block${editable ? ' editable' : ''}${b.cancelled ? ' cancelled' : ''} has-tooltip`}
       style={{ ...style, background: color.bg, borderLeftColor: color.accent }}
       onClick={onBusyClick ? () => onBusyClick(b) : undefined}
       data-tooltip={tooltipLines}
@@ -205,6 +209,7 @@ function CourseBlock({
         </span>
         {b.room && <span className="meta room">{b.room}</span>}
       </div>
+      {b.cancelled && <span className="cancelled-tag">Cancelled</span>}
     </div>
   )
 }

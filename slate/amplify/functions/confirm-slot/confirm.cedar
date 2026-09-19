@@ -12,3 +12,16 @@ when {
   (principal.role == "FACULTY" || principal.role == "ADMIN") &&
   resource.requester == principal
 };
+
+// Who may cancel a regular class: the faculty member it belongs to (the
+// name they linked their login to matches the class's faculty), or an
+// admin.
+permit (
+  principal,
+  action == Slate::Action::"Cancel",
+  resource is Slate::TimetableSlot
+)
+when {
+  principal.role == "ADMIN" ||
+  (principal.role == "FACULTY" && principal.facultyName == resource.faculty)
+};
