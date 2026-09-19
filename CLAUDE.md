@@ -44,7 +44,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 
 ### Who sees what
 
-**Student:** **this week and next week only** (no older history); cancelled occurrences struck through and extras marked, each with who made it; one "What changed this week and next" list (new ones highlighted until marked seen); their section card showing the current CR, or **Become CR** if there's none. Electives show only if registered (admin upload); without registration data the whole basket shows, labelled as such.
+**Student:** **this week and next week only** (no older history); cancelled occurrences struck through and extras marked, each with who made it; one "What changed this week and next" list (new ones highlighted until marked seen); their section card showing the current CR, or **Become CR** if there's none; **My Batch**: every section of their own batch (never another batch) with its CR and roll numbers (served by the `batchRoster` query; the student list itself is admin-only). Electives show only if registered (admin upload); without registration data the whole basket shows, labelled as such.
 
 **CR** (a student who claimed their section; first to claim, admin can revoke): everything a student sees, plus **Make a change**:
 - **Cancel** an occurrence.

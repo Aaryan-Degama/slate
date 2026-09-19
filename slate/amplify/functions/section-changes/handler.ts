@@ -5,6 +5,9 @@
 // - addExtra:         add a one-off class of a course on one date
 // - moveOccurrence:   cancel an occurrence and add it elsewhere, linked
 // - undoChange:       undo a change (whole, or for your own section)
+// and two read-only queries that need the admin-only student list:
+// - mySection:        the caller's section, from their verified email
+// - batchRoster:      every section of the caller's batch: CR + roll numbers
 // A change applies to every section of the batch taking the course: one
 // ScheduleChange row per section, sharing a groupId. Rows record who made
 // them; undo marks them (undoneBy/undoneAt) instead of deleting them.
@@ -50,7 +53,8 @@ const user = (sub: string) => ({ type: 'Slate::User', id: sub })
 // prefix picks the branch (IIT -> IT, IEC -> EC). Same rules as
 // src/lib/rollLookup.ts, but server-side so the section can be trusted.
 const EMAIL_RE = /^([a-z]{2,4})(\d{4})(\d+)@iiita\.ac\.in$/i
-async function sectionOf(email: string): Promise<Section | null> {
+/** Where the student list (or, failing that, a roll range) puts this email. */
+async function resolve(email: string): Promise<(Section & { subSection?: string }) | null> {
   const m = email.match(EMAIL_RE)
   if (!m) return null
   const [, prefix, year, rollStr] = m
@@ -60,9 +64,30 @@ async function sectionOf(email: string): Promise<Section | null> {
   const student = (await scanAll(SS))
     .filter((r) => ok(r) && Number(r.rollNumber) === roll)
     .sort((a, b) => Number(b.semester) - Number(a.semester))[0]
-  const hit = student ?? (await scanAll(RR)).find((r) => ok(r) && roll >= Number(r.minRoll) && roll <= Number(r.maxRoll))
+  const base = { program: '', branch: '', semester: 0 }
+  if (student) {
+    const sec = String(student.section)
+    const sub = student.subSection ? String(student.subSection) : sec.length === 2 ? sec : undefined
+    return { ...base, program: String(student.program), branch: String(student.branch), semester: Number(student.semester), section: sec[0], ...(sub ? { subSection: sub } : {}) }
+  }
+  const hits = (await scanAll(RR)).filter((r) => ok(r) && roll >= Number(r.minRoll) && roll <= Number(r.maxRoll))
+  const whole = hits.find((r) => String(r.section).length === 1)
+  const sub = hits.find((r) => String(r.section).length === 2)
+  const hit = whole ?? sub
   if (!hit) return null
-  return { program: String(hit.program), branch: String(hit.branch), semester: Number(hit.semester), section: String(hit.section)[0] }
+  return {
+    program: String(hit.program),
+    branch: String(hit.branch),
+    semester: Number(hit.semester),
+    section: String(hit.section)[0],
+    ...(sub ? { subSection: String(sub.section) } : {}),
+  }
+}
+
+/** The caller's section for authorization: main section only (B1 -> B). */
+async function sectionOf(email: string): Promise<Section | null> {
+  const r = await resolve(email)
+  return r && { program: r.program, branch: r.branch, semester: r.semester, section: r.section }
 }
 
 const roleOf = (groups: string[]) => (groups.includes('ADMIN') ? 'ADMIN' : 'STUDENT')
@@ -245,6 +270,42 @@ function checkTimes(a: Row) {
 export const handler = async (event: Event) => {
   const field = event.fieldName ?? event.info?.fieldName
   const a = event.arguments
+  const email = event.identity.claims?.email ?? ''
+
+  if (field === 'mySection') return JSON.stringify(await resolve(email))
+
+  if (field === 'batchRoster') {
+    // Only the caller's own batch: roll numbers are shown to classmates, never across batches.
+    const me = await resolve(email)
+    if (!me) return JSON.stringify(null)
+    const [students, ranges, reps] = await Promise.all([scanAll(SS), scanAll(RR), scanAll(CR)])
+    const batch = { program: me.program, branch: me.branch, semester: me.semester }
+    const mine = students.filter((r) => inBatch(r, batch))
+    const letters = new Set([
+      ...mine.map((r) => String(r.section)[0]),
+      ...ranges.filter((r) => inBatch(r, batch)).map((r) => String(r.section)[0]),
+    ])
+    const sections = [...letters].sort().map((section) => {
+      const rep = reps.find((r) => r.sectionKey === `${batchKey(batch)}|${section}`)
+      return {
+        section,
+        cr: rep ? { email: rep.email, since: rep.createdAt } : null,
+        students: mine
+          .filter((r) => String(r.section)[0] === section)
+          .map((r) => {
+            const roll = `${String(r.admissionYear)}${String(r.rollNumber).padStart(3, '0')}`
+            return { id: `I${String(r.branch).toUpperCase()}${roll}`, subSection: r.subSection ?? (String(r.section).length === 2 ? r.section : null) }
+          })
+          .sort((x, y) => x.id.localeCompare(y.id)),
+        // No student list uploaded for this section: say which rolls it covers instead.
+        ranges: ranges
+          .filter((r) => inBatch(r, batch) && String(r.section)[0] === section)
+          .map((r) => ({ section: r.section, admissionYear: r.admissionYear, minRoll: r.minRoll, maxRoll: r.maxRoll })),
+      }
+    })
+    return JSON.stringify({ ...batch, me: `${me.section}${me.subSection ? ` (${me.subSection})` : ''}`, sections })
+  }
+
   const ctx = await context(event.identity)
 
   switch (field) {

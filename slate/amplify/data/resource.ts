@@ -127,7 +127,9 @@ const schema = a.schema({
   // list. Takes precedence over RollRange, which only fits clean
   // contiguous ranges. Courses and faculty are NOT stored here -- they
   // follow from the section's TimetableSlot rows.
-  // Written only by the import-data Lambda (ADMIN group).
+  // Written only by the import-data Lambda (ADMIN group). Admin-only:
+  // students see just their own batch's roster via batchRoster, and their
+  // own section via mySection (the section-changes Lambda reads it for them).
   StudentSection: a
     .model({
       admissionYear: a.string().required(),
@@ -138,7 +140,7 @@ const schema = a.schema({
       section: a.string().required(),
       subSection: a.string(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+    .authorization((allow) => [allow.group('ADMIN')]),
 
   // Dated free slots for a course's sections and its professor, ranked
   // with reasons and a free room, or who blocks it (JSON string).
@@ -161,6 +163,17 @@ const schema = a.schema({
   // Cedar policy (functions/section-changes/policy.cedar) decides. Open to
   // every signed-in user on purpose -- the policy, not the API layer,
   // decides who may do what. Dates are YYYY-MM-DD.
+  // Read-only: the caller's own section, and their own batch's roster.
+  mySection: a
+    .query()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  batchRoster: a
+    .query()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
   claimCr: a
     .mutation()
     .returns(a.json())

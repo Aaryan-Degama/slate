@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
 import NewRequest from './NewRequest'
+import MyBatch from './MyBatch'
 import StudentDashboard from './StudentDashboard'
 import AdminDashboard from './AdminDashboard'
 import AdminTimetableEditor from './AdminTimetableEditor'
@@ -12,7 +13,7 @@ import { useClassReps } from './lib/classReps'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
-type StudentTab = 'timetable' | 'find'
+type StudentTab = 'timetable' | 'batch' | 'find'
 type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps' | 'activity'
 
 function AppShell({
@@ -173,6 +174,12 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           active: studentTab === 'timetable',
           onClick: () => setStudentTab('timetable'),
         },
+        {
+          key: 'batch',
+          label: 'My Batch',
+          active: studentTab === 'batch',
+          onClick: () => setStudentTab('batch'),
+        },
         // Changing the timetable is a CR tool; students just see the result.
         ...(isCr
           ? [
@@ -198,6 +205,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           markSeen={markChangesSeen}
         />
       )}
+      {studentTab === 'batch' && <MyBatch email={profile.email} />}
       {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
     </AppShell>
   )

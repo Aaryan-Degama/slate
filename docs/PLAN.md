@@ -49,6 +49,7 @@ Needs: "What do I have today and this week, what changed, and who changed it?"
    - Electives show only if the student is registered; if the batch has no registration data, the whole basket shows, labelled "elective (registration not uploaded)".
 2. **What changed**: changes affecting me this week and next, newest first, with unseen ones highlighted (tracked by `User.changesSeenAt`, so it works across devices). No older history: changes expire via DynamoDB TTL (`expiresAt`) once their week is over.
 3. **My section card**: section, current CR (roll number and since when), and **Become CR** if nobody holds it.
+   **My Batch**: every section of the student's own batch, with its CR and roll numbers (or its roll range if no list is uploaded). Server-scoped to their batch via `batchRoster`; `StudentSection` is admin-only.
 4. **Onboarding**: automatic. Section comes from the roll number (`StudentSection`, then `RollRange`). If it isn't found, "your roll number isn't in the uploaded lists; ask your admin". A student can still pick a section to *view*, but that pick is unverified and can never make them CR (the server already ignores it).
 
 Students **don't** get Find a Slot; it's a CR tool. That removes a confusing screen.
