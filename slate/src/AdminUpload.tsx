@@ -32,6 +32,7 @@ type SheetResult =
       title: string
       batch: { program: string | null; branch: string | null; semester: number | null }
       needsSection: boolean
+      rollRanges: { section: string; prefix: string; admissionYear: string; minRoll: number; maxRoll: number }[]
       rows: ParsedRow[]
       skipped: { coord: string; day: string; text: string; reason: string }[]
       issues: Issue[]
@@ -47,6 +48,7 @@ const parseTimetable = (client.queries as unknown as {
 }).parseTimetable
 
 type Batch = { program: string; branch: string; semester: number }
+const rangeUpdates = (r: ImportResult) => r.rollRanges?.filter((x) => x.status !== 'same').length ?? 0
 
 // Must match TEMPLATE_HEADERS in amplify/functions/parse-timetable/reader.ts.
 const TEMPLATE_HEADERS = ['Day', 'Start', 'End', 'Course', 'Type', 'Section', 'Room', 'Faculty']
@@ -121,7 +123,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
       })
       setDiff(res)
       if (!dryRun) {
-        setAppliedCount(res.added + res.changedCount + (removeMissing ? res.removed : 0))
+        setAppliedCount(res.added + res.changedCount + (removeMissing ? res.removed : 0) + rangeUpdates(res))
         setStatus('applied')
       }
     } catch (err) {
@@ -279,6 +281,24 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
             )}
           />
 
+          {selected.rollRanges.length > 0 && (
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <h2>Roll ranges found in this sheet</h2>
+              {selected.rollRanges.map((r) => (
+                <div key={`${r.prefix}-${r.section}`} className="meta">
+                  Sec {r.section}: {r.prefix}
+                  {r.admissionYear}
+                  {String(r.minRoll).padStart(3, '0')} – {r.prefix}
+                  {r.admissionYear}
+                  {String(r.maxRoll).padStart(3, '0')}
+                </div>
+              ))}
+              <p className="meta">
+                Saved on Apply for the sections imported here whose roll prefix matches the branch (IIT → IT, IEC → EC).
+              </p>
+            </div>
+          )}
+
           {flagged.length > 0 && (
             <div className="card gap-warning" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <h2>Flagged for review ({flagged.length})</h2>
@@ -350,6 +370,12 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                   </tbody>
                 </table>
               )}
+              {diff.rollRanges && diff.rollRanges.length > 0 && (
+                <p className="meta">
+                  Roll ranges:{' '}
+                  {diff.rollRanges.map((r) => `Sec ${r.section} ${r.minRoll}–${r.maxRoll} (${r.status})`).join(' · ')}
+                </p>
+              )}
               {diff.removed > 0 && (
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input type="checkbox" checked={removeMissing} onChange={(e) => setRemoveMissing(e.target.checked)} />
@@ -358,12 +384,12 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
               )}
               <button
                 className="primary"
-                disabled={status === 'applying' || diff.added + diff.changedCount + (removeMissing ? diff.removed : 0) === 0}
+                disabled={status === 'applying' || diff.added + diff.changedCount + (removeMissing ? diff.removed : 0) + rangeUpdates(diff) === 0}
                 onClick={() => runTimetable(false)}
               >
                 {status === 'applying'
                   ? 'Applying...'
-                  : `Apply ${diff.added + diff.changedCount + (removeMissing ? diff.removed : 0)} change(s)`}
+                  : `Apply ${diff.added + diff.changedCount + (removeMissing ? diff.removed : 0) + rangeUpdates(diff)} change(s)`}
               </button>
             </div>
           )}

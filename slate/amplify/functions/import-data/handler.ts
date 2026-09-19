@@ -38,6 +38,7 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 })
 const TT = process.env.TIMETABLE_SLOT_TABLE!
 const SS = process.env.STUDENT_SECTION_TABLE!
+const RR = process.env.ROLL_RANGE_TABLE!
 
 async function scanAll(table: string): Promise<Item[]> {
   const items: Item[] = []
@@ -136,10 +137,33 @@ export const handler = async (event: Event) => {
     })
     const removed = existing.filter((e) => !seen.has(key(e)))
 
+    // Roll ranges printed in the sheet, for the sections imported here and
+    // this batch's branch (roll prefix IIT -> IT, IEC -> EC).
+    const importedSections = new Set(rows.map((r) => r.section))
+    const sheetRanges = parsed.rollRanges.filter(
+      (x) => importedSections.has(x.section) && x.prefix.slice(1) === batch.branch.toUpperCase(),
+    )
+    const currentRanges = (await scanAll(RR)).filter(inBatch)
+    const rangeChanges = sheetRanges.map((x) => {
+      const cur = currentRanges.find((c) => c.admissionYear === x.admissionYear && c.section === x.section)
+      const status = !cur ? 'new' : Number(cur.minRoll) === x.minRoll && Number(cur.maxRoll) === x.maxRoll ? 'same' : 'changed'
+      return { ...x, status, id: cur?.id }
+    })
+
     if (!a.dryRun) {
       await batchWrite(TT, added.map((r) => newItem('TimetableSlot', r)))
       for (const c of changed) await update(TT, c.cur.id, { endTime: c.next.endTime, room: c.next.room, faculty: c.next.faculty })
       if (a.removeMissing) await batchWrite(TT, removed.map((e) => del(e.id)))
+      await batchWrite(
+        RR,
+        rangeChanges
+          .filter((x) => x.status === 'new')
+          .map((x) =>
+            newItem('RollRange', { ...batch, admissionYear: x.admissionYear, section: x.section, minRoll: x.minRoll, maxRoll: x.maxRoll }),
+          ),
+      )
+      for (const x of rangeChanges.filter((x) => x.status === 'changed'))
+        await update(RR, x.id!, { minRoll: x.minRoll, maxRoll: x.maxRoll })
     }
     result = {
       kind: 'timetable',
@@ -153,6 +177,7 @@ export const handler = async (event: Event) => {
       })),
       changedCount: changed.length,
       problems: [],
+      rollRanges: rangeChanges.map(({ id: _, ...x }) => x),
     }
   } else if (a.kind === 'students') {
     const table = readTable(ws)

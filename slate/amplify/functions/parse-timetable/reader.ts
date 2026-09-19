@@ -56,12 +56,22 @@ export type Row = {
 type WorkRow = Omit<Row, 'program' | 'branch' | 'semester' | 'faculty'> & { longEndTime: string | null }
 export type Skipped = { coord: string; day: string; text: string; reason: string }
 export type Issue = { type: string; detail?: string; course?: string; section?: string; kind?: string; row?: string; rows?: string[] }
+export type SheetRollRange = {
+  section: string
+  /** Roll prefix, e.g. IIT / IEC: names the branch (IIT -> IT, IEC -> EC). */
+  prefix: string
+  admissionYear: string
+  minRoll: number
+  maxRoll: number
+}
 export type SheetResult = {
   sheet: string
   title: string
   batch: { program: string | null; branch: string | null; semester: number | null }
   /** Classes name no section (single-section batch); the admin says which. */
   needsSection: boolean
+  /** "Sec A | IIT2026001 to IIT2026154" lines printed under the grid. */
+  rollRanges: SheetRollRange[]
   rows: Row[]
   skipped: Skipped[]
   issues: Issue[]
@@ -90,6 +100,26 @@ function parseRange(ref: string): Range {
   const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(ref)!
   const col = (s: string) => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0)
   return { top: Number(m[2]), left: col(m[1]), bottom: Number(m[4]), right: col(m[3]) }
+}
+
+const SEC_LABEL_RE = /^Sec(?:tion)?\.?\s*([A-Z]\d?)$/i
+const RANGE_RE = /^([A-Z]{2,4})(\d{4})(\d{3})\s*(?:to|-|–|—)\s*(?:[A-Z]{2,4})?(?:\d{4})?(\d{3})$/i
+
+/** Rows like "Sec A | IIT2026001 to IIT2026154" anywhere below the grid. */
+function readRollRanges(text: (r: number, c: number) => string, fromRow: number, maxRow: number, maxCol: number) {
+  const out: SheetRollRange[] = []
+  for (let r = fromRow; r <= maxRow; r++) {
+    for (let c = 1; c < maxCol; c++) {
+      const sec = SEC_LABEL_RE.exec(text(r, c).trim())
+      if (!sec) continue
+      const range = RANGE_RE.exec(text(r, c + 1).trim())
+      if (!range) continue
+      const [, prefix, year, lo, hi] = range
+      if (Number(hi) < Number(lo)) continue
+      out.push({ section: sec[1].toUpperCase(), prefix: prefix.toUpperCase(), admissionYear: year, minRoll: Number(lo), maxRoll: Number(hi) })
+    }
+  }
+  return out
 }
 
 /** Cell text, '' for the non-anchor cells of a merge (exceljs throws on those). */
@@ -185,6 +215,7 @@ function readSheet(ws: Worksheet) {
     cells,
     legend: readLegend(text, lastRow, maxRow, maxCol),
     lectureRoom: lectureRooms.length === 1 ? lectureRooms[0]! : null,
+    rollRanges: readRollRanges(text, lastRow, maxRow, maxCol),
   }
 }
 
@@ -429,6 +460,7 @@ export function processSheet(ws: Worksheet): SheetResult {
     title: sheet.title,
     batch,
     needsSection: rows.some((r) => r.section === WHOLE_BATCH),
+    rollRanges: sheet.rollRanges,
     rows: rows.map(({ longEndTime: _, ...r }) => {
       const fac = sheet.legend[r.courseId]?.faculty ?? {}
       return { ...r, ...batch, faculty: fac[r.section] ?? fac[r.section[0]] ?? fac['*'] ?? null }
@@ -540,6 +572,7 @@ export function readTemplate(ws: Worksheet): SheetResult | null {
     title: `${ws.name} (Slate template)`,
     batch,
     needsSection: false,
+    rollRanges: [],
     rows: rows.map((row) => {
       const { longEndTime: _, ...r } = row
       return { ...r, ...batch, faculty: faculty.get(row) ?? null }

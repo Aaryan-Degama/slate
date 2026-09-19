@@ -33,6 +33,7 @@ export type ImportResult = {
   problemCount?: number
   valid?: number
   counts?: Record<string, number>
+  rollRanges?: { section: string; admissionYear: string; minRoll: number; maxRoll: number; status: 'new' | 'same' | 'changed' }[]
   applied: boolean
 }
 

@@ -148,7 +148,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           },
         ]}
       >
-        {adminTab === 'data' && <AdminDashboard />}
+        {adminTab === 'data' && <AdminDashboard onOpenStudents={() => setAdminTab('students')} />}
         {adminTab === 'upload' && <AdminUpload onDone={() => setAdminTab('edit')} />}
         {adminTab === 'students' && <AdminStudents />}
         {adminTab === 'edit' && <AdminTimetableEditor />}

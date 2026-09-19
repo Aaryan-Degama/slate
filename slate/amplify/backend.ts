@@ -21,6 +21,7 @@ const importFn = backend.importData.resources.lambda;
 for (const [model, env] of [
   ['TimetableSlot', 'TIMETABLE_SLOT_TABLE'],
   ['StudentSection', 'STUDENT_SECTION_TABLE'],
+  ['RollRange', 'ROLL_RANGE_TABLE'],
 ] as const) {
   tables[model].grantReadWriteData(importFn);
   backend.importData.addEnvironment(env, tables[model].tableName);
