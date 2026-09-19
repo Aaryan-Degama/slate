@@ -112,7 +112,7 @@ export default function TimetableGrid({
                     return (
                       <div
                         key={`bg-${cell.start}`}
-                        className={`hour-bg${empty && freeIsHighlighted ? ' free' : ''}${
+                        className={`hour-bg${empty && freeIsHighlighted && !cell.outside ? ' free' : ''}${
                           empty && editable ? ' editable-empty' : ''
                         }`}
                         style={{ gridColumn: `${hi + 1}`, gridRow: `1 / ${lanes + 1}` }}

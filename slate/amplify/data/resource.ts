@@ -1,6 +1,7 @@
 import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { parseTimetable } from '../functions/parse-timetable/resource';
 import { importData } from '../functions/import-data/resource';
+import { findSlots } from '../functions/find-slots/resource';
 
 /**
  * Slate's data model (see CLAUDE.md §4).
@@ -67,13 +68,12 @@ const schema = a.schema({
       // { earliestTime?, latestTime?, allowedDays?, minDurationMins? }
       constraints: a.json(),
     })
-    // TODO (Day 3): the PROPOSED -> CONFIRMED transition (via 'update') is
-    // the one action CLAUDE.md gates to role: FACULTY via Cedar. Plain
-    // model authorization can't express that role check, so this is open
-    // to any authenticated user for now -- same acknowledged gap as
-    // ScheduleChange.create below. Moving both to a role-checked custom
-    // mutation once Cedar is wired up.
-    .authorization((allow) => [allow.authenticated().to(['read', 'create', 'update'])]),
+    // Creating/confirming a request is faculty-only (Cognito FACULTY group;
+    // admins too). Anyone signed in can read.
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),
+      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create', 'update']),
+    ]),
 
   // Written only by the slot-finding Lambda; the app only ever reads these.
   ProposedSlot: a
@@ -106,11 +106,11 @@ const schema = a.schema({
       room: a.string(),
       changeType: a.ref('ChangeType').required(),
     })
-    // TODO (Day 3): same gap as SlotRequest above — creating a
-    // ScheduleChange is the actual "Confirm" action CLAUDE.md gates to
-    // role: FACULTY via Cedar. Moving to a role-checked custom mutation
-    // once that's built; open to any authenticated user for now.
-    .authorization((allow) => [allow.authenticated().to(['read', 'create'])]),
+    // Writing one is the Confirm action: FACULTY group (and admins) only.
+    .authorization((allow) => [
+      allow.authenticated().to(['read']),
+      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create']),
+    ]),
 
   // The roll-number -> section mapping (CLAUDE.md §4a), as real data
   // instead of hardcoded app code. An admin provides ranges per
@@ -146,6 +146,21 @@ const schema = a.schema({
       subSection: a.string(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+
+  // Common free slots across sections, ranked with reasons, a suggested
+  // room, and the blocking section when none exist (JSON string).
+  findSlots: a
+    .query()
+    .arguments({
+      groups: a.string().array().required(), // "program|branch|semester|section"
+      earliestTime: a.string(),
+      latestTime: a.string(),
+      allowedDays: a.string().array(),
+      minDurationMins: a.integer(),
+    })
+    .returns(a.json())
+    .handler(a.handler.function(findSlots))
+    .authorization((allow) => [allow.authenticated()]),
 
   // Admin upload: parses a timetable file already uploaded to S3 and
   // returns proposed rows + validation issues per sheet (JSON string).

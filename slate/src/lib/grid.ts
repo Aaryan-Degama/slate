@@ -50,6 +50,8 @@ export type Cell = {
   end: string;
   busy: BusyEntry[];
   change: ChangeEntry | null;
+  /** Empty but not a proposed slot (outside the request's constraints). */
+  outside?: boolean;
 };
 
 const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
