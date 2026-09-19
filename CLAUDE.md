@@ -25,29 +25,38 @@ We went through two prior versions before this one: a campus lost & found app (t
 
 ## 1. The problem, precisely
 
-At IIIT Allahabad, when a professor needs to schedule a makeup class, a doubt session, or an extra lecture for a course that spans multiple branches or sections, there is no way to see everyone's timetable at once. Today this means a WhatsApp poll to two or three CRs, or an email thread going back and forth for a day or two, trying to find one hour where none of the affected sections clash. It happens often, it always costs real time, and the information needed to answer it instantly already exists — it's just scattered across separate timetables nobody has cross-referenced.
+At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a class moved to another day) are agreed between a professor and the class representative (CR), then spread by WhatsApp. Students miss them, and when a makeup class spans several sections, finding one hour where none of them clash (and the professor is free) takes a day of polls and back-and-forth. The information needed to answer it instantly already exists, scattered across separate timetables nobody has cross-referenced.
 
 ---
 
 ## 2. What we are building
 
-> **Revision note (Day 2):** the scope below was expanded from the original 3-screen, faculty-only plan after building the first version and testing it against real data. The original plan (faculty picks sections → sees free slots → emails CRs) is preserved as the core scheduling flow. Added: a student dashboard and a teacher dashboard, both read-only views of the same ingested timetable data with no new data entry beyond a one-time identity link; and the confirm step now updates the visible timetable grid directly instead of sending an SES email. See git history around this revision for what changed and why — the reasoning (especially around not fabricating per-student elective data) is preserved in `NOTES.md` (untracked, local).
+> **Revision note (Day 3 → 4):** the product went from faculty-driven (a professor schedules, students see it) to **student-run, with one CR per section**. That's how changes really happen here: the professor tells the CR, the CR tells everyone. Professors don't log in; their ingested schedule only feeds the slot finder. The full reasoning and phased build plan are in `docs/PLAN.md`.
 
-**Five screens**, all reading from the same ingested timetable data. Two are the original scheduling flow; two are read-only dashboards; the fifth is a lightweight one-time identity link.
+### Core concepts
 
-### The screens
+- **Batch**: program + branch + semester (B.Tech IT Sem 5). A CR's powers never leave their batch.
+- **Section**: A, B, C, with sub-groups B1/B2 belonging to B. A student's section comes from their roll number (admin-uploaded student lists / roll ranges), never from their own choice.
+- **Regular class**: a weekly `TimetableSlot` row, ingested, read-only except admin corrections.
+- **Occurrence**: a regular class on a specific date.
+- **Change** (always dated): **Cancelled** (an occurrence called off), **Extra** (a one-off class), or **Moved** (a linked cancel + extra). A change applies to every section of that course in the batch, and records who made it (CR roll number and section) and when. Undo keeps the record, marked "undone by …".
+- **Effective timetable** for a date = regular classes that weekday − cancellations that date + extras that date. Computed, never stored.
 
-1. **New Request** (faculty) — select the program/branch/section combinations that must attend, plus optional constraints (earliest/latest time, which days are allowed, how long the slot needs to be).
-2. **Proposed Slots** (faculty) — a visual weekly grid (days × real class hours) with genuinely free slots highlighted green, plus the same reasoning as before ("free for all 3 sections, mid-morning, no lunch clash") and a suggested room. If no slot satisfies every constraint, show which section is the actual blocker instead of just failing silently.
-3. **Confirm** (faculty) — requester picks the winning slot. No email. Instead, this writes a `ScheduleChange` record that the affected sections'/faculty's grid views pick up and highlight — green for newly scheduled, a distinct color for cancelled. One-directional. Not a chat, not a poll — the decision is already made, this just makes it visible to whoever looks at their timetable.
-4. **Student Dashboard** — after a one-time identity link (self-select their real section from the ingested list — see §4a), shows their own weekly timetable as a grid, generated entirely from ingested `TimetableSlot` data plus any `ScheduleChange` highlights for their section. Also lets them check which slots are free for their own class (read-only — a student never schedules anything).
-5. **Teacher Dashboard** — after a one-time identity link (self-select their real name from the ingested faculty list), shows their own teaching timetable as a grid, generated from ingested data (which sections they teach, when, where) plus `ScheduleChange` highlights.
+### Who sees what
+
+**Student:** their week, date-based with prev/next; cancelled occurrences struck through and extras marked, each with who made it; a "What changed" feed for the next 14 days (unseen highlighted); their section card showing the current CR, or **Become CR** if there's none. Electives show only if registered (admin upload); without registration data the whole basket shows, labelled as such.
+
+**CR** (a student who claimed their section; first to claim, admin can revoke): everything a student sees, plus **Make a change**:
+- **Cancel** an occurrence.
+- **Extra class**: pick a course; its sections are pre-selected; the finder returns dated slots free for every affected section, the batch's electives, and the course professor (in any batch), with a free room and reasons, or explains who blocks it.
+- **Move**: an occurrence to a finder-chosen slot.
+- **My changes**, each with Undo.
+
+**Admin:** upload timetables, student lists and course registrations; correct timetable data; list and revoke CRs; an activity log of every change across batches.
 
 ### Non-goals — do NOT build these
 
-Any voting or back-and-forth confirmation among students — the requester decides, the tool informs. Editable or crowdsourced timetable *course* data — it's read-only, ingested from official sources; the only self-service input anywhere in the product is the one-time identity link in §4a, which points at existing real data rather than creating new schedule data. Multi-day/recurring requests (a single one-off slot only). A general-purpose meeting scheduler beyond this specific timetable shape. Any form of user-created or user-joined group — sections are automatic from enrollment data. Chat/messaging. A native mobile app. Multi-institution support — IIITA is hardcoded. Per-student elective-level precision — electives are handled as conservative busy blocks per the whole basket, not tracked per student (no data source exists for that; see `NOTES.md` §21). Anything not in the five screens above.
-
-If a feature isn't visible in the 3-minute video, it is wasted time. Ask before adding anything.
+Voting or approval flows between students/CRs (one CR decides for the course; others can undo for their own section). Chat/messaging. Professor logins (for now). Recurring changes (every change is one date). Crowdsourced edits to regular timetable data (admin only). User-created groups. A native mobile app. Multi-institution support (IIITA is hardcoded). Visual/UI design work until the flows are done. Anything not above: ask first.
 
 ---
 
@@ -61,13 +70,13 @@ Ship It track. Deployed, with a public URL, from day one.
 |---|---|---|
 | Frontend | React + Vite, TypeScript | Typed client from the Amplify Gen 2 schema |
 | Hosting | AWS Amplify Hosting | Public URL in minutes, CI from GitHub |
-| Auth | Amazon Cognito, IIITA email domain gate, `role: FACULTY \| STUDENT` custom attribute | The domain gate is the closed-community boundary. The role attribute gates exactly one action: who may hit Confirm. Anyone can view proposed slots and their own dashboard; only faculty/CR can finalize a slot |
+| Auth | Amazon Cognito, IIITA email domain gate, `ADMIN` group | The domain gate is the closed-community boundary. Everyone else is a student; a student becomes CR by claiming their section (a `ClassRep` row), not through a Cognito role |
 | API + DB | Amplify Gen 2 data (AppSync + DynamoDB) | Generated from a schema file, no hand-written CRUD |
-| Data ingestion | Amazon Textract on real AAA timetable PDFs → Amazon Bedrock to normalize inconsistent per-program formatting into one schema → DynamoDB | One-time-per-semester batch job we run, not a live user flow. Real AWS work: the PDFs are genuinely unstructured and inconsistent across programs |
-| Slot-finding logic | Custom Lambda — interval intersection across all requested sections' timetables, filtered by the request's constraints, ranked by simple heuristics, with a room-availability pass and a blocking-section explanation when no slot satisfies everything | This is the entire product. It needs every affected section's timetable at once — no chatbot can do this, because it doesn't have access to that data |
-| Authorization | Cedar | One real policy: only `role: FACULTY` may call Confirm. Small, but genuine — not decorative |
-| Notification | ~~Amazon SES~~ dropped | Replaced by the grid-highlight mechanism (§2, §4a) — confirming a slot writes a `ScheduleChange` row that the affected student/teacher dashboards render as a green (scheduled) or distinct (cancelled) highlight on their own timetable grid, instead of an email. Decided Day 2 once the product had dashboards worth checking. |
-| Logs | CloudWatch | One real Textract/Bedrock ingestion log line, and one Lambda invocation log, shown on camera |
+| Data ingestion | Admin uploads the official timetable / student-list spreadsheets → S3 → `parse-timetable` Lambda reads them into rows + validation issues → admin reviews → `import-data` Lambda writes DynamoDB | Runs per semester from the app, not a script. The real sheets are inconsistent across programs (merged cells, cohort labels, sub-sections); the reader handles those and flags what it can't read. Textract/Bedrock on PDFs was the original plan; `scripts/bedrock-normalize-timetable.py` exists but isn't in the live path |
+| Slot-finding logic | `find-slots` Lambda: interval intersection across every affected section's effective timetable plus the course professor's, constraint filtering, simple ranking, a free-room pass, and a blocking explanation when nothing fits (§5) | Needs every affected section's and the professor's timetable at once; no chatbot has that data |
+| Authorization | Cedar (`cedar-wasm` inside the `section-changes` Lambda) | Real policy file (`policy.cedar`): claim CR only for your own verified section while it has none; only a course section's CR changes that course in their batch; admins can do anything. Every decision is logged to CloudWatch |
+| Notification | In-app "What changed" feed (SES dropped) | Every change is a dated `ScheduleChange` row that the affected students' week view and feed pick up, with who made it |
+| Logs | CloudWatch | The Cedar allow/deny decisions from `section-changes` and the `slots-found` line from `find-slots`, shown on camera |
 
 ### The honest call on ingestion — say this in the writeup, don't hide it
 
@@ -82,54 +91,43 @@ No OpenSearch, RDS, NAT Gateway, ECS/Fargate, EKS, or EC2. Everything scales to 
 ## 4. Data model
 
 ```
-User         userId, email, role: FACULTY|STUDENT,
-              linkedSection: { program, branch, section } | null   (students)
-              linkedFacultyName: string | null                     (faculty)
-
-TimetableSlot slotId, program, branch, section, semester,
-              day, startTime, endTime, courseId, room,
-              faculty  (added Day 2 — enables the teacher dashboard;
-                        backfilled from the real course-legend data in
-                        the same source spreadsheet, not fabricated)
-
-SlotRequest   requestId, requesterId, status: PROPOSED|CONFIRMED,
-              sections: [{ program, branch, section }],
-              constraints: { earliestTime, latestTime, allowedDays, minDurationMins }
-
-ProposedSlot  requestId, day, startTime, endTime, room,
-              score, reason,
-              blockingSection (present only when no slot satisfies all constraints)
-
-ScheduleChange   (added Day 2, replaces the SES email)
-              changeId, relatedRequestId,
-              program, branch, section,
-              day, startTime, endTime, courseId, room,
-              changeType: SCHEDULED|CANCELLED,
-              createdAt
+User            owner, email, role (STUDENT|ADMIN, display only; ADMIN
+                rights come from the Cognito ADMIN group), linkedSection,
+                changesSeenAt
+TimetableSlot   program, branch, semester, section ('*' = whole batch,
+                used for electives), day, startTime, endTime, courseId,
+                room, faculty, sessionType (L/P/T), isElective
+StudentSection  admissionYear, rollNumber, program, branch, semester,
+                section, subSection         -- admin-uploaded student lists
+RollRange       admissionYear, program, branch, semester, minRoll,
+                maxRoll, section            -- fallback roll -> section
+CourseRegistration  rollNumber, admissionYear, program, branch,
+                semester, courseId          -- admin-uploaded electives
+ClassRep        sectionKey ("program|branch|semester|section"), program,
+                branch, semester, section, sub, email
+ScheduleChange  one row per affected section:
+                groupId (shared by one action), kind (CANCELLED | EXTRA |
+                MOVED_FROM | MOVED_TO), date (YYYY-MM-DD), program, branch,
+                semester, section, startTime, endTime, courseId, room,
+                faculty, relatedSlotId, changedBy, changedBySection,
+                undoneBy, undoneAt
 ```
 
-### 4a. Identity link (student/teacher dashboards)
-
-We have no source for automatic roll-number → section or name → faculty-identity resolution (checked — not publicly available, and not worth the privacy exposure of ingesting a full roster into a public repo even if it were). Until/unless that data becomes available, a student or faculty member links their own login to their own real, already-ingested identity **once**, on first use of their dashboard:
-
-- **Student:** picks their own `{program, branch, section}` from a dropdown of real values already present in `TimetableSlot` — not typed free text, not new schedule data, just pointing at something that already exists.
-- **Faculty:** picks their own name from a dropdown of real distinct `faculty` values already present in `TimetableSlot`.
-
-This is the one explicitly-allowed exception to the "no user-entered data" rule in §2's non-goals — it's an identity pointer, not schedule data. If a real roll-number file becomes available, this step is replaced with automatic lookup and nothing else in the data model changes.
+All writes to `ScheduleChange` and `ClassRep` go through the `section-changes` Lambda, where the Cedar policy (`amplify/functions/section-changes/policy.cedar`) decides. The server derives a caller's section from their verified email and a course's sections from `TimetableSlot`; it never trusts sections sent by the client.
 
 ---
 
 ## 5. The slot-finding algorithm
 
-Input: a `SlotRequest` — the sections that must attend, plus constraints.
+Input: a course in the CR's batch, the sections taking it (pre-selected, deselectable), candidate dates, and constraints (time window, length).
 
-1. Pull each section's `TimetableSlot` rows for the week.
-2. Intersect free intervals across all of them.
-3. Filter by the request's constraints (time window, allowed days, minimum duration).
-4. If at least one slot survives: rank by — avoids lunch (12–2), falls within 9am–5pm, not at the very edge of anyone's day — then attach a free room if the timetable data shows one.
-5. If **no** slot survives: identify which single section, if excluded, would unblock the most candidate slots, and report it as the reason ("Section B has back-to-back classes all week except Friday 4pm — that's the only slot that works for everyone else").
+1. For each candidate date, build each section's effective busy set: regular classes that weekday, minus cancellations that date, plus extras that date, plus the batch's electives (treated as busy, conservatively).
+2. Add the course professor's busy set: their regular classes and extras in **any** batch.
+3. Intersect free intervals across all of them; filter by the constraints.
+4. Rank: avoids lunch (12–2:30), within 9–5:30, not at the edge of anyone's day. Attach a free room.
+5. If nothing survives: report the single section, or the professor, whose removal unblocks the most slots, and what they have then.
 
-No ML — correct, explainable interval intersection and a simple bottleneck check. Keep it in its own Lambda so it's testable in isolation with real timetable data.
+No ML: explainable interval intersection and a bottleneck check, in its own Lambda (`find-slots`).
 
 ---
 
@@ -167,12 +165,12 @@ No ML — correct, explainable interval intersection and a simple bottleneck che
 
 ## 8. Demo video — 3 minutes, one thread
 
-1. **0:00–0:25** The problem, concretely: a professor needing a makeup class, a WhatsApp poll to three CRs, two days of back-and-forth to find one hour.
-2. **0:25–0:55** New Request — pick the three sections, set constraints. Show the real Textract/Bedrock ingestion log line — this is the "must show AWS in the video" requirement, do not skip it.
-3. **0:55–1:35** Proposed Slots — the ranked result with reasoning and a suggested room, appearing in seconds instead of two days. Then show the no-common-slot case and the blocking-section explanation — this is the moment that proves it's real logic, not a lookup table.
-4. **1:35–2:05** Confirm — pick the slot, then cut to a student's (or teacher's) dashboard showing the same slot appear as a live green "scheduled" highlight on their own timetable grid.
-5. **2:05–2:35** Architecture diagram and the live URL.
-6. **2:35–3:00** What we learned, specifically: what Textract/Bedrock ingestion accuracy actually looked like on real institutional timetable PDFs, and why the scope stayed this narrow.
+1. **0:00–0:25** The problem: the professor tells the CR "IML makeup this week for A, B and C"; the WhatsApp poll starts; half the class misses the update.
+2. **0:25–0:50** A student's week: date-based, their section's CR shown. Show AWS: the Cognito sign-in and the admin upload (S3 + Lambda parse).
+3. **0:50–1:40** The CR: Extra class → pick IML → sections pre-selected → dated slots that avoid every section, the electives and the professor, with a room and reasons. Then the no-slot case with the blocking explanation naming who blocks it.
+4. **1:40–2:10** Confirm, then cut to a Sec A student: the extra class appears with the CR's roll number, and it's in their "What changed" feed. A non-CR trying the same is denied: show the Cedar deny line in CloudWatch.
+5. **2:10–2:35** Architecture diagram and the live URL.
+6. **2:35–3:00** What we learned: ingesting real institutional timetables, and why the CR model (not faculty logins) fits how changes actually happen.
 
 ---
 
