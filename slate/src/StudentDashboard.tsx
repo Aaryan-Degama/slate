@@ -24,7 +24,7 @@ type ScheduleChangeRow = ChangeEntry & {
 }
 const listScheduleChanges = () => listAll<ScheduleChangeRow>(client.models.ScheduleChange.list)
 
-type RepProps = { userId: string; reps: ClassRep[] | null; reloadReps: () => Promise<void> }
+type RepProps = { userId: string; reps: ClassRep[] | null; reloadReps: () => Promise<void>; repsError?: string }
 
 export default function StudentDashboard({
   profile,
@@ -135,6 +135,7 @@ function MyTimetable({
   userId,
   reps,
   reloadReps,
+  repsError,
 }: { section: SectionRef; email: string } & RepProps) {
   const [data, setData] = useState<{ slots: TimetableSlotRow[]; changes: ScheduleChangeRow[] } | null>(null)
   const [showFree, setShowFree] = useState(false)
@@ -147,6 +148,7 @@ function MyTimetable({
   const [room, setRoom] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(() => {
     // The linked profile may predate a B1/B2 upload, so re-resolve the
@@ -180,14 +182,17 @@ function MyTimetable({
               mine(r.section),
           ),
         })
+        setLoadError('')
       },
-    )
+    ).catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
   }, [section, email])
 
   useEffect(() => {
     load()
   }, [load])
 
+  const failed = loadError ? `Couldn't load your timetable: ${loadError}` : !reps ? repsError : ''
+  if (failed) return <p className="error">{failed}</p>
   if (!data || !reps) return <p>Loading your timetable...</p>
 
   const key = sectionKey(section)

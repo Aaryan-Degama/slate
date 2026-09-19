@@ -26,14 +26,21 @@ export const sectionKey = (s: { program: string; branch: string; semester: numbe
 
 export function useClassReps() {
   const [reps, setReps] = useState<ClassRep[] | null>(null)
+  const [error, setError] = useState('')
   const reload = useCallback(
-    () => listAll<ClassRep>(client.models.ClassRep.list).then(({ data }) => setReps(data)),
+    () =>
+      listAll<ClassRep>(client.models.ClassRep.list)
+        .then(({ data }) => {
+          setReps(data)
+          setError('')
+        })
+        .catch((err) => setError(`Couldn't load class reps: ${err instanceof Error ? err.message : String(err)}`)),
     [],
   )
   useEffect(() => {
     reload()
   }, [reload])
-  return { reps, reload }
+  return { reps, reload, error }
 }
 
 type Result = Promise<{ errors?: { message: string }[] }>

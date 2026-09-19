@@ -82,7 +82,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
   const [studentTab, setStudentTab] = useState<StudentTab>('timetable')
   const [adminTab, setAdminTab] = useState<AdminTab>('data')
   const { profile, loading, error, linkSection } = useMyProfile(userId)
-  const { reps, reload: reloadReps } = useClassReps()
+  const { reps, reload: reloadReps, error: repsError } = useClassReps()
 
   if (loading || !profile) {
     return (
@@ -180,6 +180,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           userId={userId}
           reps={reps}
           reloadReps={reloadReps}
+          repsError={repsError}
         />
       )}
       {studentTab === 'find' && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
