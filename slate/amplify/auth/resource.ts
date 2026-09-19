@@ -8,7 +8,8 @@ import { preSignUp } from './pre-sign-up/resource';
  * Sign-up is gated to @iiita.ac.in emails by the preSignUp trigger
  * (amplify/auth/pre-sign-up/handler.ts) — that's the closed-community
  * boundary. The `role` custom attribute gates only who may hit
- * Confirm & Notify (enforced separately via Cedar).
+ * Confirm (enforced by the Cedar policy in
+ * amplify/functions/confirm-slot/confirm.cedar).
  */
 export const auth = defineAuth({
   loginWith: {

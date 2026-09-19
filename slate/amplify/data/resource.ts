@@ -2,6 +2,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { parseTimetable } from '../functions/parse-timetable/resource';
 import { importData } from '../functions/import-data/resource';
 import { findSlots } from '../functions/find-slots/resource';
+import { confirmSlot } from '../functions/confirm-slot/resource';
 
 /**
  * Slate's data model (see CLAUDE.md §4).
@@ -68,11 +69,12 @@ const schema = a.schema({
       // { earliestTime?, latestTime?, allowedDays?, minDurationMins? }
       constraints: a.json(),
     })
-    // Creating/confirming a request is faculty-only (Cognito FACULTY group;
-    // admins too). Anyone signed in can read.
+    // Creating a request is faculty-only (Cognito FACULTY group; admins
+    // too). Confirming it goes through confirmSlot (Cedar), so no updates
+    // from the app. Anyone signed in can read.
     .authorization((allow) => [
       allow.authenticated().to(['read']),
-      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create', 'update']),
+      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create']),
     ]),
 
   // Written only by the slot-finding Lambda; the app only ever reads these.
@@ -106,11 +108,9 @@ const schema = a.schema({
       room: a.string(),
       changeType: a.ref('ChangeType').required(),
     })
-    // Writing one is the Confirm action: FACULTY group (and admins) only.
-    .authorization((allow) => [
-      allow.authenticated().to(['read']),
-      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create']),
-    ]),
+    // Read-only from the app: rows are written only by the confirmSlot
+    // Lambda, after the Cedar policy allows it.
+    .authorization((allow) => [allow.authenticated().to(['read'])]),
 
   // The roll-number -> section mapping (CLAUDE.md §4a), as real data
   // instead of hardcoded app code. An admin provides ranges per
@@ -160,6 +160,24 @@ const schema = a.schema({
     })
     .returns(a.json())
     .handler(a.handler.function(findSlots))
+    .authorization((allow) => [allow.authenticated()]),
+
+  // Confirm: the Lambda asks Cedar (functions/confirm-slot/confirm.cedar)
+  // whether the caller may confirm this request, then writes one
+  // ScheduleChange per section. Open to every signed-in user on purpose --
+  // the policy, not the API layer, makes the decision.
+  confirmSlot: a
+    .mutation()
+    .arguments({
+      requestId: a.id().required(),
+      day: a.string().required(),
+      startTime: a.string().required(),
+      endTime: a.string().required(),
+      room: a.string(),
+      purpose: a.string().required(),
+    })
+    .returns(a.json())
+    .handler(a.handler.function(confirmSlot))
     .authorization((allow) => [allow.authenticated()]),
 
   // Admin upload: parses a timetable file already uploaded to S3 and

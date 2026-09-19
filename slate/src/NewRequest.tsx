@@ -14,25 +14,16 @@ type SlotRequestInput = { requesterId: string; status: 'PROPOSED' | 'CONFIRMED';
 const createSlotRequest = client.models.SlotRequest.create as unknown as (
   input: SlotRequestInput,
 ) => Promise<{ data: { id: string } | null; errors?: { message: string }[] }>
-const updateSlotRequest = client.models.SlotRequest.update as unknown as (input: {
-  id: string
-  status: 'CONFIRMED'
-}) => Promise<{ errors?: { message: string }[] }>
-type ScheduleChangeInput = {
-  relatedRequestId: string
-  program: string
-  branch: string
-  section: string
-  day: string
-  startTime: string
-  endTime: string
-  courseId: string
-  room?: string | null
-  changeType: 'SCHEDULED'
-}
-const createScheduleChange = client.models.ScheduleChange.create as unknown as (
-  input: ScheduleChangeInput,
-) => Promise<{ errors?: { message: string }[] }>
+const confirmSlot = (client.mutations as unknown as {
+  confirmSlot: (a: {
+    requestId: string
+    day: string
+    startTime: string
+    endTime: string
+    room?: string | null
+    purpose: string
+  }) => Promise<{ errors?: { message: string }[] }>
+}).confirmSlot
 const findSlots = (client.queries as unknown as {
   findSlots: (a: {
     groups: string[]
@@ -145,23 +136,15 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
     setConfirming(slot)
     setError('')
     try {
-      for (const g of chosen) {
-        const res = await createScheduleChange({
-          relatedRequestId: requestId,
-          program: g.program,
-          branch: g.branch,
-          section: g.section,
-          day: slot.day,
-          startTime: slot.start,
-          endTime: slot.end,
-          courseId: purpose.trim(),
-          room: slot.room,
-          changeType: 'SCHEDULED',
-        })
-        if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
-      }
-      const upd = await updateSlotRequest({ id: requestId, status: 'CONFIRMED' })
-      if (upd.errors?.length) throw new Error(upd.errors.map((e) => e.message).join('; '))
+      const res = await confirmSlot({
+        requestId,
+        day: slot.day,
+        startTime: slot.start,
+        endTime: slot.end,
+        room: slot.room,
+        purpose: purpose.trim(),
+      })
+      if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
       setConfirmed(slot)
       setStatus('confirmed')
     } catch (err) {

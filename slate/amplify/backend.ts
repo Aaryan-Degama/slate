@@ -5,6 +5,7 @@ import { storage } from './storage/resource';
 import { parseTimetable } from './functions/parse-timetable/resource';
 import { importData } from './functions/import-data/resource';
 import { findSlots } from './functions/find-slots/resource';
+import { confirmSlot } from './functions/confirm-slot/resource';
 
 const backend = defineBackend({
   auth,
@@ -13,6 +14,7 @@ const backend = defineBackend({
   parseTimetable,
   importData,
   findSlots,
+  confirmSlot,
 });
 
 // import-data writes the validated rows straight to DynamoDB.
@@ -36,3 +38,10 @@ for (const [model, env] of [
   tables[model].grantReadData(findFn);
   backend.findSlots.addEnvironment(env, tables[model].tableName);
 }
+
+// confirm-slot reads the request and writes the confirmation.
+const confirmFn = backend.confirmSlot.resources.lambda;
+tables.SlotRequest.grantReadWriteData(confirmFn);
+tables.ScheduleChange.grantWriteData(confirmFn);
+backend.confirmSlot.addEnvironment('SLOT_REQUEST_TABLE', tables.SlotRequest.tableName);
+backend.confirmSlot.addEnvironment('SCHEDULE_CHANGE_TABLE', tables.ScheduleChange.tableName);
