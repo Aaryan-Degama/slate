@@ -17,7 +17,7 @@ export type Profile = {
 // AWSJSON (linkedSection's real GraphQL type) travels over the wire as a
 // *string*; the normal generated client auto-(de)serializes it, but our
 // manually-cast calls bypass that, so we do it by hand on both ends.
-type RawProfile = Omit<Profile, 'linkedSection'> & { linkedSection: string | object | null }
+type RawProfile = Omit<Profile, 'linkedSection'> & { linkedSection: string | object | null; owner?: string | null }
 
 function normalize(raw: RawProfile | null): Profile | null {
   if (!raw) return null
@@ -32,37 +32,45 @@ const listMyUsers = () => listAll<RawProfile>(client.models.User.list)
 const createUser = client.models.User.create as unknown as (input: {
   email: string
   role: 'STUDENT' | 'FACULTY' | 'ADMIN'
-}) => Promise<{ data: RawProfile | null }>
+}) => Promise<{ data: RawProfile | null; errors?: { message: string }[] }>
 const updateUser = client.models.User.update as unknown as (
   input: { id: string; linkedSection?: string; linkedFacultyName?: string },
 ) => Promise<{ data: RawProfile | null; errors?: { message: string }[] }>
 
-/** Owner-scoped: list() only ever returns the signed-in user's own rows. */
-export function useMyProfile() {
+/** Every signed-in user can read all User rows, so pick our own by the
+ * owner field (Cognito sub, stored as "<sub>::<username>"). */
+export function useMyProfile(userId: string) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const existing = await listMyUsers()
-      if (existing.data.length > 0) {
-        if (!cancelled) setProfile(normalize(existing.data[0]))
+      const all = await listMyUsers()
+      const mine = all.data.filter((u) => u.owner === userId || u.owner?.startsWith(`${userId}::`))
+      if (mine.length > 0) {
+        if (!cancelled) setProfile(normalize(mine[0]))
       } else {
         const attrs = await fetchUserAttributes()
         const created = await createUser({
           email: attrs.email ?? '',
           role: 'STUDENT',
         })
+        if (created.errors?.length) throw new Error(created.errors.map((e) => e.message).join('; '))
         if (!cancelled) setProfile(normalize(created.data))
       }
       if (!cancelled) setLoading(false)
     }
-    load()
+    load().catch((err) => {
+      if (cancelled) return
+      setError(err instanceof Error ? err.message : String(err))
+      setLoading(false)
+    })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [userId])
 
   const linkSection = async (section: {
     program: string
@@ -89,5 +97,5 @@ export function useMyProfile() {
     if (normalized) setProfile(normalized)
   }
 
-  return { profile, loading, linkSection, linkFacultyName }
+  return { profile, loading, error, linkSection, linkFacultyName }
 }
