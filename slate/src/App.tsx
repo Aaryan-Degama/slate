@@ -165,12 +165,17 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           active: studentTab === 'timetable',
           onClick: () => setStudentTab('timetable'),
         },
-        {
-          key: 'find',
-          label: 'Find a Slot',
-          active: studentTab === 'find',
-          onClick: () => setStudentTab('find'),
-        },
+        // Changing the timetable is a CR tool; students just see the result.
+        ...(isCr
+          ? [
+              {
+                key: 'find',
+                label: 'Make a change',
+                active: studentTab === 'find',
+                onClick: () => setStudentTab('find'),
+              },
+            ]
+          : []),
       ]}
     >
       {studentTab === 'timetable' && (
@@ -183,7 +188,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           repsError={repsError}
         />
       )}
-      {studentTab === 'find' && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
+      {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
     </AppShell>
   )
 }

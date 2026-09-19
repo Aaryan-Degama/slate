@@ -1,14 +1,16 @@
-// Every change to a section's timetable after ingestion goes through here,
-// and every one is decided by the Cedar policy in policy.cedar:
-// - claimCr:      become your section's class representative (CR)
-// - addClass:     CR adds a one-off class to their section
-// - cancelClass:  CR cancels a regular class of their section
-// - undoChange:   CR removes an added class / restores a cancelled one
-// Each ScheduleChange records who made it (changedBy), so every change on
-// a timetable is traceable to a person.
+// Every change to a timetable after ingestion goes through here, and every
+// one is decided by the Cedar policy in policy.cedar (CLAUDE.md §2, §4):
+// - claimCr:          become your section's class representative (CR)
+// - cancelOccurrence: cancel a regular class on one date
+// - addExtra:         add a one-off class of a course on one date
+// - moveOccurrence:   cancel an occurrence and add it elsewhere, linked
+// - undoChange:       undo a change (whole, or for your own section)
+// A change applies to every section of the batch taking the course: one
+// ScheduleChange row per section, sharing a groupId. Rows record who made
+// them; undo marks them (undoneBy/undoneAt) instead of deleting them.
 import { randomUUID } from 'node:crypto'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { BatchWriteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { BatchWriteCommand, DynamoDBDocumentClient, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { initSync, isAuthorized, type CedarValueJson } from '@cedar-policy/cedar-wasm/web'
 import { CEDAR_WASM_BASE64, POLICY } from './embedded.gen'
 
@@ -19,7 +21,9 @@ type Identity = { sub: string; groups?: string[] | null; claims?: { email?: stri
 // AppSync Lambda resolver puts it under info. Accept both.
 type Event = { fieldName?: string; info?: { fieldName: string }; arguments: Record<string, unknown>; identity: Identity }
 type Row = Record<string, unknown>
-type Section = { program: string; branch: string; semester: number; section: string }
+type Batch = { program: string; branch: string; semester: number }
+type Section = Batch & { section: string }
+type Entity = { uid: { type: string; id: string }; attrs: Record<string, CedarValueJson>; parents: [] }
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const env = (k: string) => process.env[k]!
@@ -36,9 +40,11 @@ async function scanAll(table: string): Promise<Row[]> {
   return items
 }
 
-/** Sections are keyed by their main section: a B1/B2 class belongs to B's CR. */
-const keyOf = (s: Row) =>
-  `${s.program}|${s.branch}|${s.semester}|${String(s.section)[0]}`
+const batchKey = (b: Row | Batch) => `${b.program}|${b.branch}|${b.semester}`
+const inBatch = (r: Row, b: Batch) => r.program === b.program && r.branch === b.branch && Number(r.semester) === b.semester
+/** CRs are per main section: a B1/B2 class belongs to B's CR. */
+const keyOf = (s: Row | Section) => `${batchKey(s)}|${String(s.section)[0]}`
+const user = (sub: string) => ({ type: 'Slate::User', id: sub })
 
 // IIITA emails look like iit<admissionYear><rollNumber>@iiita.ac.in; the
 // prefix picks the branch (IIT -> IT, IEC -> EC). Same rules as
@@ -61,104 +67,271 @@ async function sectionOf(email: string): Promise<Section | null> {
 
 const roleOf = (groups: string[]) => (groups.includes('ADMIN') ? 'ADMIN' : 'STUDENT')
 
-/** Ask Cedar; throws with `denied` unless the policy allows it. Every decision is logged. */
-async function authorize(action: string, identity: Identity, key: string, denied: string) {
+// ---------------------------------------------------------------- dates
+const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const weekdayOf = (date: string) => DAY_NAMES[new Date(`${date}T00:00:00Z`).getUTCDay()]
+/** Today in IST, as YYYY-MM-DD. */
+const todayIst = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10)
+function checkDate(date: unknown): string {
+  if (typeof date !== 'string' || !DATE_RE.test(date)) throw new Error('Pick a date.')
+  if (date < todayIst()) throw new Error("That date has already passed.")
+  const limit = new Date(Date.now() + (5.5 * 3600e3) + 120 * 86400e3).toISOString().slice(0, 10)
+  if (date > limit) throw new Error('That date is too far ahead.')
+  return date
+}
+
+// ---------------------------------------------------------------- Cedar
+type Ctx = { identity: Identity; email: string; mine: Section | null; reps: Row[]; principal: Entity }
+
+async function context(identity: Identity): Promise<Ctx> {
   const email = identity.claims?.email ?? ''
-  const mine = await sectionOf(email)
-  const reps = await scanAll(CR)
-  const rep = reps.find((r) => r.sectionKey === key)
-  const user = { type: 'Slate::User', id: identity.sub }
-  const principal = { uid: user, attrs: { role: roleOf(identity.groups ?? []), section: mine ? keyOf(mine) : '' }, parents: [] }
-  const resourceAttrs: Record<string, CedarValueJson> = { key, hasCr: Boolean(rep) }
-  if (rep) resourceAttrs.cr = { __entity: { type: 'Slate::User', id: String(rep.sub) } }
-  const resource = { uid: { type: 'Slate::Section', id: key }, attrs: resourceAttrs, parents: [] }
+  const [mine, reps] = await Promise.all([sectionOf(email), scanAll(CR)])
+  const principal: Entity = {
+    uid: user(identity.sub),
+    attrs: { role: roleOf(identity.groups ?? []), section: mine ? keyOf(mine) : '' },
+    parents: [],
+  }
+  return { identity, email, mine, reps, principal }
+}
+
+/** Ask Cedar; throws with `denied` unless the policy allows it. Every decision is logged. */
+function authorize(ctx: Ctx, action: string, resource: Entity, denied: string) {
   const answer = isAuthorized({
-    principal: user,
+    principal: ctx.principal.uid,
     action: { type: 'Slate::Action', id: action },
     resource: resource.uid,
     context: {},
     policies: { staticPolicies: POLICY },
-    entities: [principal, resource],
+    entities: [ctx.principal, resource],
   })
   if (answer.type === 'failure') throw new Error(`Cedar error: ${answer.errors.map((e) => e.message).join('; ')}`)
   const decision = answer.response.decision
-  console.log(JSON.stringify({ cedar: decision, action, email, principal: principal.attrs, section: key, cr: rep?.email ?? null }))
+  console.log(JSON.stringify({ cedar: decision, action, email: ctx.email, principal: ctx.principal.attrs, resource: resource.uid.id }))
   if (decision !== 'allow') throw new Error(denied)
-  return { email, mine, rep }
 }
 
-async function writeChanges(rows: Row[]) {
+const sectionEntity = (ctx: Ctx, key: string): Entity => {
+  const rep = ctx.reps.find((r) => r.sectionKey === key)
+  const attrs: Record<string, CedarValueJson> = { key, hasCr: Boolean(rep) }
+  if (rep) attrs.cr = { __entity: user(String(rep.sub)) }
+  return { uid: { type: 'Slate::Section', id: key }, attrs, parents: [] }
+}
+
+/** A course's class(es) in a batch, with the CRs of every section in them. */
+const courseEntity = (ctx: Ctx, batch: Batch, courseId: string, rows: Row[]): Entity => {
+  const keys = new Set(rows.map(keyOf))
+  const crs = ctx.reps.filter((r) => keys.has(String(r.sectionKey))).map((r) => ({ __entity: user(String(r.sub)) }))
+  return { uid: { type: 'Slate::Course', id: `${batchKey(batch)}|${courseId}` }, attrs: { crs }, parents: [] }
+}
+
+// ---------------------------------------------------------------- helpers
+/** The sections a change reaches: B covers B1/B2, so drop sub-sections whose main section is present. */
+function reach(sections: string[]): string[] {
+  const set = new Set(sections)
+  return [...set].filter((s) => !(s.length === 2 && set.has(s[0]))).sort()
+}
+
+async function writeRows(rows: Row[]) {
   for (let i = 0; i < rows.length; i += 25)
     await ddb.send(new BatchWriteCommand({ RequestItems: { [SC]: rows.slice(i, i + 25).map((Item) => ({ PutRequest: { Item } })) } }))
 }
 
-const change = (fields: Row, changedBy: string) => {
+function newRow(ctx: Ctx, groupId: string, fields: Row): Row {
   const now = new Date().toISOString()
-  return { id: randomUUID(), __typename: 'ScheduleChange', ...fields, changedBy, createdAt: now, updatedAt: now }
+  return {
+    id: randomUUID(),
+    __typename: 'ScheduleChange',
+    groupId,
+    ...fields,
+    changedBy: ctx.email,
+    changedBySub: ctx.identity.sub,
+    changedBySection: ctx.mine ? `${ctx.mine.section}` : null,
+    createdAt: now,
+    updatedAt: now,
+  }
 }
 
+const live = (r: Row) => !r.undoneAt
+
+/** The regular class `slotId` on `date`, across every section it's held for together. */
+async function occurrence(slotId: string, date: string, slots: Row[]) {
+  const slot = slots.find((r) => r.id === slotId)
+  if (!slot) throw new Error('No such class.')
+  if (weekdayOf(date) !== slot.day) throw new Error(`${slot.courseId} isn't held on ${weekdayOf(date)}.`)
+  const batch: Batch = { program: String(slot.program), branch: String(slot.branch), semester: Number(slot.semester) }
+  const together = slots.filter(
+    (r) =>
+      inBatch(r, batch) &&
+      r.courseId === slot.courseId &&
+      r.day === slot.day &&
+      r.startTime === slot.startTime &&
+      r.endTime === slot.endTime &&
+      (r.sessionType ?? '') === (slot.sessionType ?? ''),
+  )
+  return { slot, batch, together }
+}
+
+async function assertNotCancelled(together: Row[], date: string) {
+  const ids = new Set(together.map((r) => r.id))
+  const existing = (await scanAll(SC)).find(
+    (c) => live(c) && c.date === date && ids.has(c.relatedSlotId) && (c.kind === 'CANCELLED' || c.kind === 'MOVED_FROM'),
+  )
+  if (existing) throw new Error('That class is already cancelled or moved on that date.')
+}
+
+const cancelRows = (ctx: Ctx, groupId: string, kind: string, date: string, together: Row[]) =>
+  together.map((r) =>
+    newRow(ctx, groupId, {
+      kind,
+      date,
+      program: r.program,
+      branch: r.branch,
+      semester: r.semester,
+      section: r.section,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      courseId: r.courseId,
+      sessionType: r.sessionType ?? null,
+      ...(r.room ? { room: r.room } : {}),
+      ...(r.faculty ? { faculty: r.faculty } : {}),
+      relatedSlotId: r.id,
+    }),
+  )
+
+function extraRows(ctx: Ctx, groupId: string, kind: string, batch: Batch, courseRows: Row[], sections: string[], a: Row) {
+  const faculty = courseRows.find((r) => r.faculty)?.faculty
+  return sections.map((section) =>
+    newRow(ctx, groupId, {
+      kind,
+      date: a.date,
+      ...batch,
+      section,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      courseId: courseRows[0].courseId,
+      ...(a.room ? { room: a.room } : {}),
+      ...(faculty ? { faculty } : {}),
+    }),
+  )
+}
+
+/** Sections for an extra class: every section of the batch taking the course, or the chosen subset of them. */
+function extraSections(courseRows: Row[], chosen: unknown): string[] {
+  const all = reach(courseRows.map((r) => String(r.section)))
+  const pick = Array.isArray(chosen) ? (chosen as string[]).filter(Boolean) : []
+  if (!pick.length) return all
+  const ok = pick.filter((s) => all.includes(s))
+  if (ok.length !== pick.length) throw new Error(`Only sections your professor teaches for this course can be included (${all.join(", ")}).`)
+  return ok
+}
+
+function checkTimes(a: Row) {
+  const t = /^\d{2}:\d{2}$/
+  if (!t.test(String(a.startTime)) || !t.test(String(a.endTime)) || String(a.startTime) >= String(a.endTime))
+    throw new Error('Pick a valid time.')
+}
+
+// ---------------------------------------------------------------- handler
 export const handler = async (event: Event) => {
-  const { identity } = event
-  const args = event.arguments
   const field = event.fieldName ?? event.info?.fieldName
+  const a = event.arguments
+  const ctx = await context(event.identity)
+
   switch (field) {
     case 'claimCr': {
-      const mine = await sectionOf(identity.claims?.email ?? '')
-      if (!mine) throw new Error("Your section couldn't be found from your roll number, so you can't claim CR yet.")
-      const key = keyOf(mine)
-      const { email } = await authorize('ClaimCr', identity, key, 'Your section already has a CR.')
+      if (!ctx.mine) throw new Error("Your section couldn't be found from your roll number, so you can't claim CR yet.")
+      const key = keyOf(ctx.mine)
+      authorize(ctx, 'ClaimCr', sectionEntity(ctx, key), 'Your section already has a CR.')
       const now = new Date().toISOString()
       await ddb.send(
         new PutCommand({
           TableName: CR,
-          Item: { id: randomUUID(), __typename: 'ClassRep', sectionKey: key, ...mine, sub: identity.sub, email, createdAt: now, updatedAt: now },
+          Item: { id: randomUUID(), __typename: 'ClassRep', sectionKey: key, ...ctx.mine, sub: ctx.identity.sub, email: ctx.email, createdAt: now, updatedAt: now },
         }),
       )
       return JSON.stringify({ claimed: key })
     }
 
-    case 'addClass': {
-      const mine = await sectionOf(identity.claims?.email ?? '')
-      if (!mine) throw new Error("Your section couldn't be found from your roll number.")
-      const { email } = await authorize('AddClass', identity, keyOf(mine), "Only your section's CR can add classes.")
-      const { day, startTime, endTime, room, purpose } = args as Record<string, string | null>
-      await writeChanges([
-        change({ ...mine, day, startTime, endTime, courseId: purpose, ...(room ? { room } : {}), changeType: 'SCHEDULED' }, email),
-      ])
-      return JSON.stringify({ added: 1 })
+    case 'cancelOccurrence': {
+      const date = checkDate(a.date)
+      const slots = await scanAll(TT)
+      const { slot, batch, together } = await occurrence(String(a.slotId), date, slots)
+      authorize(ctx, 'Cancel', courseEntity(ctx, batch, String(slot.courseId), together), 'Only the CR of a section in this class can cancel it.')
+      await assertNotCancelled(together, date)
+      const rows = cancelRows(ctx, randomUUID(), 'CANCELLED', date, together)
+      await writeRows(rows)
+      return JSON.stringify({ cancelled: rows.map((r) => r.section) })
     }
 
-    case 'cancelClass': {
-      const rows: Row[] = []
-      for (const id of args.slotIds as string[]) {
-        const slot = (await ddb.send(new GetCommand({ TableName: TT, Key: { id } }))).Item
-        if (!slot) throw new Error('No such class.')
-        const { email } = await authorize('CancelClass', identity, keyOf(slot), "Only this section's CR can cancel its classes.")
-        const { program, branch, semester, section, day, startTime, endTime, courseId, room } = slot
-        rows.push(
-          change({ relatedSlotId: id, program, branch, semester, section, day, startTime, endTime, courseId, ...(room ? { room } : {}), changeType: 'CANCELLED' }, email),
-        )
+    case 'addExtra': {
+      const date = checkDate(a.date)
+      checkTimes(a)
+      if (!['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(weekdayOf(date))) throw new Error('Pick a weekday.')
+      // The course is looked up in the caller's own batch (an admin must say which batch).
+      const batch: Batch | null = a.program
+        ? { program: String(a.program), branch: String(a.branch), semester: Number(a.semester) }
+        : ctx.mine
+      if (!batch) throw new Error("Your section couldn't be found from your roll number.")
+      const slots = await scanAll(TT)
+      let courseRows = slots.filter((r) => inBatch(r, batch) && r.courseId === a.courseId && r.section !== '*')
+      if (!courseRows.length) throw new Error(`${a.courseId} isn't taught in ${batchKey(batch)}.`)
+      // A course can have a different professor per section (IML in IT
+      // Sem 5 has three). An extra class is the CR's professor's, so it
+      // reaches the sections that professor teaches, not every section.
+      if (ctx.mine) {
+        const profs = new Set(courseRows.filter((r) => keyOf(r) === keyOf(ctx.mine!) && r.faculty).map((r) => r.faculty))
+        if (profs.size) courseRows = courseRows.filter((r) => profs.has(r.faculty))
       }
-      await writeChanges(rows)
-      return JSON.stringify({ cancelled: rows.length })
+      authorize(ctx, 'AddExtra', courseEntity(ctx, batch, String(a.courseId), courseRows), "Only the CR of a section taking this course can add a class for it.")
+      const rows = extraRows(ctx, randomUUID(), 'EXTRA', batch, courseRows, extraSections(courseRows, a.sections), { ...a, date })
+      await writeRows(rows)
+      return JSON.stringify({ added: rows.map((r) => r.section) })
+    }
+
+    case 'moveOccurrence': {
+      const fromDate = checkDate(a.fromDate)
+      const date = checkDate(a.date)
+      checkTimes(a)
+      const slots = await scanAll(TT)
+      const { slot, batch, together } = await occurrence(String(a.slotId), fromDate, slots)
+      authorize(ctx, 'Move', courseEntity(ctx, batch, String(slot.courseId), together), 'Only the CR of a section in this class can move it.')
+      await assertNotCancelled(together, fromDate)
+      const groupId = randomUUID()
+      const from = cancelRows(ctx, groupId, 'MOVED_FROM', fromDate, together)
+      // The moved class keeps the occurrence's sections (and a room, if given).
+      const to = extraRows(ctx, groupId, 'MOVED_TO', batch, together, reach(together.map((r) => String(r.section))), { ...a, date })
+      await writeRows([...from, ...to])
+      return JSON.stringify({ moved: to.map((r) => r.section) })
     }
 
     case 'undoChange': {
-      const id = args.changeId as string
-      const row = (await ddb.send(new GetCommand({ TableName: SC, Key: { id } }))).Item
-      if (!row || row.undoneAt) throw new Error('No such change.')
-      const { email } = await authorize('UndoChange', identity, keyOf(row), "Only this section's CR can undo its changes.")
-      // Kept, not deleted: the history still shows who made it and who undid it.
+      const groupId = String(a.groupId)
+      const rows = (await scanAll(SC)).filter((r) => r.groupId === groupId && live(r))
+      if (!rows.length) throw new Error('Nothing to undo.')
+      const maker: Entity = { uid: { type: 'Slate::Change', id: groupId }, attrs: { maker: { __entity: user(String(rows[0].changedBySub ?? '')) } }, parents: [] }
+      let targets = rows
+      try {
+        authorize(ctx, 'UndoGroup', maker, 'denied')
+      } catch {
+        // Not the maker: a CR may still take the change off their own section.
+        if (!ctx.mine) throw new Error('Only whoever made this change, or an affected section’s CR, can undo it.')
+        const key = keyOf(ctx.mine)
+        targets = rows.filter((r) => keyOf(r) === key)
+        if (!targets.length) throw new Error('This change doesn’t affect your section.')
+        authorize(ctx, 'UndoSection', sectionEntity(ctx, key), 'Only whoever made this change, or an affected section’s CR, can undo it.')
+      }
       const now = new Date().toISOString()
-      await ddb.send(
-        new UpdateCommand({
-          TableName: SC,
-          Key: { id },
-          UpdateExpression: 'SET undoneBy = :by, undoneAt = :now, updatedAt = :now',
-          ExpressionAttributeValues: { ':by': email, ':now': now },
-        }),
-      )
-      return JSON.stringify({ undone: id })
+      for (const r of targets)
+        await ddb.send(
+          new UpdateCommand({
+            TableName: SC,
+            Key: { id: r.id },
+            UpdateExpression: 'SET undoneBy = :by, undoneAt = :now, updatedAt = :now',
+            ExpressionAttributeValues: { ':by': ctx.email, ':now': now },
+          }),
+        )
+      return JSON.stringify({ undone: targets.map((r) => r.section) })
     }
   }
   throw new Error(`Unknown field ${field}`)

@@ -13,7 +13,9 @@ import { sectionChanges } from '../functions/section-changes/resource';
  */
 const schema = a.schema({
   Role: a.enum(['STUDENT', 'FACULTY', 'ADMIN']),
-  ChangeType: a.enum(['SCHEDULED', 'CANCELLED']),
+  // CANCELLED: a regular class called off on one date. EXTRA: a one-off
+  // class. MOVED_FROM/MOVED_TO: the two halves of a move (same groupId).
+  ChangeKind: a.enum(['CANCELLED', 'EXTRA', 'MOVED_FROM', 'MOVED_TO']),
 
   User: a
     .model({
@@ -56,26 +58,31 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
-  // A change to one section's timetable, made by that section's CR (or an
-  // admin) through the section-changes Lambda -- the app only reads these.
-  // SCHEDULED = an added one-off class; CANCELLED = a regular class called
-  // off. changedBy/undoneBy make every change traceable to a person; an
-  // undone change is kept (not deleted) so the history stays complete.
+  // A dated change to a timetable, made by a CR (or an admin) through the
+  // section-changes Lambda -- the app only reads these. One action (e.g.
+  // "cancel IML on 22 Sep") writes one row per affected section, sharing a
+  // groupId. changedBy/undoneBy make every change traceable to a person;
+  // undo marks rows instead of deleting them, so the history stays complete.
   ScheduleChange: a
     .model({
+      groupId: a.string().required(),
+      kind: a.ref('ChangeKind').required(),
+      date: a.string().required(), // YYYY-MM-DD (IST)
       program: a.string().required(),
       branch: a.string().required(),
-      semester: a.integer(),
+      semester: a.integer().required(),
       section: a.string().required(),
-      day: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       courseId: a.string().required(),
+      sessionType: a.string(),
       room: a.string(),
-      changeType: a.ref('ChangeType').required(),
-      // The TimetableSlot a cancellation refers to.
+      faculty: a.string(),
+      // The regular class a cancellation / move refers to.
       relatedSlotId: a.id(),
-      changedBy: a.string(),
+      changedBy: a.string().required(), // email
+      changedBySub: a.string(),
+      changedBySection: a.string(),
       undoneBy: a.string(),
       undoneAt: a.datetime(),
     })
@@ -131,15 +138,17 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
-  // Common free slots across sections, ranked with reasons, a suggested
-  // room, and the blocking section when none exist (JSON string).
+  // Dated free slots for a course's sections and its professor, ranked
+  // with reasons and a free room, or who blocks it (JSON string).
   findSlots: a
     .query()
     .arguments({
       groups: a.string().array().required(), // "program|branch|semester|section"
+      dates: a.string().array().required(), // YYYY-MM-DD
+      courseId: a.string(), // adds the course professor's timetable
+      ignoreSlotId: a.string(), // a move: the class being moved doesn't block itself
       earliestTime: a.string(),
       latestTime: a.string(),
-      allowedDays: a.string().array(),
       minDurationMins: a.integer(),
     })
     .returns(a.json())
@@ -149,33 +158,52 @@ const schema = a.schema({
   // Timetable changes, all through the section-changes Lambda, where the
   // Cedar policy (functions/section-changes/policy.cedar) decides. Open to
   // every signed-in user on purpose -- the policy, not the API layer,
-  // decides who may do what.
+  // decides who may do what. Dates are YYYY-MM-DD.
   claimCr: a
     .mutation()
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
-  addClass: a
+  cancelOccurrence: a
+    .mutation()
+    .arguments({ slotId: a.id().required(), date: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  addExtra: a
     .mutation()
     .arguments({
-      day: a.string().required(),
+      courseId: a.string().required(),
+      date: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       room: a.string(),
-      purpose: a.string().required(),
+      // Subset of the course's sections; empty = all of them.
+      sections: a.string().array(),
+      // Admins only: which batch (a CR's batch is their own).
+      program: a.string(),
+      branch: a.string(),
+      semester: a.integer(),
     })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
-  cancelClass: a
+  moveOccurrence: a
     .mutation()
-    .arguments({ slotIds: a.id().array().required() })
+    .arguments({
+      slotId: a.id().required(),
+      fromDate: a.string().required(),
+      date: a.string().required(),
+      startTime: a.string().required(),
+      endTime: a.string().required(),
+      room: a.string(),
+    })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
   undoChange: a
     .mutation()
-    .arguments({ changeId: a.id().required() })
+    .arguments({ groupId: a.string().required() })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),

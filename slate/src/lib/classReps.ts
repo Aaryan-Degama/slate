@@ -44,11 +44,13 @@ export function useClassReps() {
 }
 
 type Result = Promise<{ errors?: { message: string }[] }>
+type Times = { date: string; startTime: string; endTime: string; room?: string | null }
 const m = client.mutations as unknown as {
   claimCr: () => Result
-  addClass: (a: { day: string; startTime: string; endTime: string; room?: string | null; purpose: string }) => Result
-  cancelClass: (a: { slotIds: string[] }) => Result
-  undoChange: (a: { changeId: string }) => Result
+  cancelOccurrence: (a: { slotId: string; date: string }) => Result
+  addExtra: (a: Times & { courseId: string; sections?: string[] }) => Result
+  moveOccurrence: (a: Times & { slotId: string; fromDate: string }) => Result
+  undoChange: (a: { groupId: string }) => Result
 }
 const call = async (p: Result) => {
   const res = await p
@@ -56,8 +58,9 @@ const call = async (p: Result) => {
 }
 
 export const claimCr = () => call(m.claimCr())
-export const addClass = (a: Parameters<typeof m.addClass>[0]) => call(m.addClass(a))
-export const cancelClass = (slotIds: string[]) => call(m.cancelClass({ slotIds }))
-export const undoChange = (changeId: string) => call(m.undoChange({ changeId }))
+export const cancelOccurrence = (slotId: string, date: string) => call(m.cancelOccurrence({ slotId, date }))
+export const addExtra = (a: Parameters<typeof m.addExtra>[0]) => call(m.addExtra(a))
+export const moveOccurrence = (a: Parameters<typeof m.moveOccurrence>[0]) => call(m.moveOccurrence(a))
+export const undoChange = (groupId: string) => call(m.undoChange({ groupId }))
 export const revokeCr = (id: string) =>
   call((client.models.ClassRep.delete as unknown as (a: { id: string }) => Result)({ id }))
