@@ -58,16 +58,23 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
     listAll<SlotRow>(client.models.TimetableSlot.list).then(({ data }) => setSlots(data))
   }, [])
 
+  // Only the student's own batch (same program, branch, semester): a CR
+  // coordinates their batch's sections, not the whole institute.
   const groups = useMemo(() => {
     const seen = new Map<string, Group>()
-    for (const r of slots ?? []) {
+    const inMyBatch = (r: SlotRow) =>
+      Boolean(mySection) &&
+      r.program === mySection!.program &&
+      r.branch === mySection!.branch &&
+      r.semester === mySection!.semester
+    for (const r of (slots ?? []).filter(inMyBatch)) {
       const key = `${r.program}|${r.branch}|${r.semester}|${r.section}`
       if (!seen.has(key)) seen.set(key, { key, program: r.program, branch: r.branch, semester: r.semester, section: r.section })
     }
     return [...seen.values()].sort(
       (a, b) => a.program.localeCompare(b.program) || a.branch.localeCompare(b.branch) || a.semester - b.semester || a.section.localeCompare(b.section),
     )
-  }, [slots])
+  }, [slots, mySection])
   const batches = useMemo(() => {
     const m = new Map<string, Group[]>()
     for (const g of groups) {
@@ -226,6 +233,7 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
 
       <p>Which sections need to attend?</p>
       {!slots && <p className="meta">Loading sections...</p>}
+      {slots && !mySection && <p className="error">Your section isn't linked yet. Open My Timetable first.</p>}
       {batches.map(([name, gs]) => (
         <div key={name} className="section-pick">
           <span className="meta">{name}</span>
