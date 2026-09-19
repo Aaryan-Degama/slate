@@ -92,6 +92,17 @@ function parseRange(ref: string): Range {
   return { top: Number(m[2]), left: col(m[1]), bottom: Number(m[4]), right: col(m[3]) }
 }
 
+/** Cell text, '' for the non-anchor cells of a merge (exceljs throws on those). */
+export function cellText(ws: Worksheet, r: number, c: number): string {
+  const cell = ws.getCell(r, c)
+  if (cell.isMerged && cell.master.address !== cell.address) return ''
+  try {
+    return (cell.text ?? '').toString().trim()
+  } catch {
+    return ''
+  }
+}
+
 // ---------------------------------------------------------------- step 1
 
 function readSheet(ws: Worksheet) {
@@ -341,7 +352,8 @@ function validate(rows: WorkRow[], legend: Record<string, LegendEntry>): Issue[]
   const issues: Issue[] = []
   const groups = atomicGroups(rows)
 
-  for (const code of [...new Set(rows.map((r) => r.courseId))].filter((c) => !legend[c]).sort())
+  const hasLegend = Object.keys(legend).length > 0
+  for (const code of [...new Set(rows.map((r) => r.courseId))].filter((c) => hasLegend && !legend[c]).sort())
     issues.push({ type: 'unknown-course', course: code, detail: "course code not in the sheet's course legend" })
 
   // Ambiguous merges: take the long reading only where every section it
@@ -386,7 +398,7 @@ function validate(rows: WorkRow[], legend: Record<string, LegendEntry>): Issue[]
     rs.forEach((a, i) => {
       for (const b of rs.slice(i + 1)) {
         if (!(a.startTime < b.endTime && b.startTime < a.endTime)) continue
-        if (a.room === b.room && a.courseId !== b.courseId) issues.push({ type: 'room-clash', rows: [short(a), short(b)] })
+        if (a.room && a.room === b.room && a.courseId !== b.courseId) issues.push({ type: 'room-clash', rows: [short(a), short(b)] })
         if (a.courseId !== b.courseId && groups.some((g) => applies(a.section, g) && applies(b.section, g)))
           issues.push({ type: 'section-clash', rows: [short(a), short(b)] })
       }
@@ -423,5 +435,116 @@ export function processSheet(ws: Worksheet): SheetResult {
     }),
     skipped,
     issues,
+  }
+}
+
+// ---------------------------------------------------------------- template
+
+// Slate's flat template: one row per class. Any sheet the grid reader
+// can't handle can be copied into this and imported exactly.
+export const TEMPLATE_HEADERS = ['Day', 'Start', 'End', 'Course', 'Type', 'Section', 'Room', 'Faculty']
+const TEMPLATE_ALIASES: Record<string, RegExp> = {
+  day: /^day$/,
+  start: /^(start|from|start time)$/,
+  end: /^(end|to|end time)$/,
+  course: /^(course|course code|subject|code)$/,
+  type: /^(type|session|session type|l\/p\/t|ltp)$/,
+  section: /^(section|sec)$/,
+  room: /^(room|venue|room no\.?)$/,
+  faculty: /^(faculty|teacher|instructor|professor)$/,
+}
+const DAY_NAMES: Record<string, string> = { MON: 'MON', TUE: 'TUE', WED: 'WED', THU: 'THU', FRI: 'FRI', SAT: 'SAT' }
+
+/** "9:00", "09:00", "2:30 pm", "14:30", "9" -> "HH:MM"; afternoon hours without am/pm follow the sheet convention (<8 = pm). */
+function parseTime(raw: string): string | null {
+  const m = /^\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*$/i.exec(raw)
+  if (!m) return null
+  let h = Number(m[1])
+  const min = m[2] ?? '00'
+  if (m[3]?.toLowerCase() === 'pm' && h < 12) h += 12
+  else if (!m[3] && h < 8) h += 12
+  if (h > 23 || Number(min) > 59) return null
+  return `${String(h).padStart(2, '0')}:${min}`
+}
+
+/** Returns null when the sheet isn't in the template layout. */
+export function readTemplate(ws: Worksheet): SheetResult | null {
+  const text = (r: number, c: number) => cellText(ws, r, c)
+  let headerRow = 0
+  let cols: Record<string, number> = {}
+  for (let r = 1; r <= Math.min(10, ws.rowCount) && !headerRow; r++) {
+    const found: Record<string, number> = {}
+    for (let c = 1; c <= ws.columnCount; c++) {
+      const h = text(r, c).toLowerCase()
+      for (const [k, re] of Object.entries(TEMPLATE_ALIASES)) if (!(k in found) && re.test(h)) found[k] = c
+    }
+    if (['day', 'start', 'end', 'course', 'section'].every((k) => k in found)) {
+      headerRow = r
+      cols = found
+    }
+  }
+  if (!headerRow) return null
+
+  const rows: WorkRow[] = []
+  const faculty = new Map<WorkRow, string | null>()
+  const skipped: Skipped[] = []
+  const get = (r: number, k: string) => (cols[k] ? text(r, cols[k]) : '')
+  for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+    const vals = Object.keys(cols).map((k) => get(r, k))
+    if (!vals.some(Boolean)) continue
+    const coord = `row ${r}`
+    const day = DAY_NAMES[get(r, 'day').slice(0, 3).toUpperCase()]
+    const start = parseTime(get(r, 'start'))
+    const end = parseTime(get(r, 'end'))
+    const course = get(r, 'course')
+    const type = (get(r, 'type') || 'L').toUpperCase()
+    const sections = get(r, 'section').toUpperCase().split(/[,\s]+/).filter(Boolean)
+    const problem = !day
+      ? `day "${get(r, 'day')}" isn't MON-SAT`
+      : !start || !end
+        ? `couldn't read the time "${get(r, 'start')}-${get(r, 'end')}"`
+        : end <= start
+          ? 'end time is not after the start time'
+          : !course
+            ? 'no course'
+            : !/^[LTP]$/.test(type)
+              ? `type "${type}" isn't L, P or T`
+              : !sections.length || !sections.every((s) => SECTION_RE.test(s))
+                ? `section "${get(r, 'section')}" isn't like A or B1`
+                : null
+    if (problem) {
+      skipped.push({ coord, day: day ?? get(r, 'day'), text: vals.filter(Boolean).join(' | '), reason: problem })
+      continue
+    }
+    for (const section of sections) {
+      const row: WorkRow = {
+        day: day!,
+        startTime: start!,
+        endTime: end!,
+        longEndTime: null,
+        courseId: course,
+        sessionType: type,
+        section,
+        room: get(r, 'room').replace(/\s+/g, ''),
+        source: coord,
+        duration: 'template',
+      }
+      rows.push(row)
+      faculty.set(row, get(r, 'faculty') || null)
+    }
+  }
+
+  const batch = { program: null, branch: null, semester: null }
+  return {
+    sheet: ws.name,
+    title: `${ws.name} (Slate template)`,
+    batch,
+    needsSection: false,
+    rows: rows.map((row) => {
+      const { longEndTime: _, ...r } = row
+      return { ...r, ...batch, faculty: faculty.get(row) ?? null }
+    }),
+    skipped,
+    issues: validate(rows, {}),
   }
 }

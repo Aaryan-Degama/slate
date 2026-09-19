@@ -1,5 +1,5 @@
 import { loadWorkbook } from './load'
-import { processSheet } from './reader'
+import { processSheet, readTemplate } from './reader'
 import { readTable } from './table'
 
 /** Reads an uploaded file from S3 and classifies each sheet: a timetable
@@ -12,7 +12,7 @@ export const handler = async (event: { arguments: { key: string } }) => {
 
   const sheets = wb.worksheets.map((ws) => {
     try {
-      return { kind: 'timetable' as const, ...processSheet(ws) }
+      return { kind: 'timetable' as const, ...(readTemplate(ws) ?? processSheet(ws)) }
     } catch {
       try {
         return readTable(ws)

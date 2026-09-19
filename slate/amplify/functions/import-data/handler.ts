@@ -7,7 +7,7 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { loadWorkbook } from '../parse-timetable/load'
-import { processSheet, WHOLE_BATCH } from '../parse-timetable/reader'
+import { processSheet, readTemplate, WHOLE_BATCH } from '../parse-timetable/reader'
 import { readTable } from '../parse-timetable/table'
 import { buildStudentRecords } from './students'
 
@@ -104,7 +104,7 @@ export const handler = async (event: Event) => {
   let result: Record<string, unknown>
 
   if (a.kind === 'timetable') {
-    const parsed = processSheet(ws)
+    const parsed = readTemplate(ws) ?? processSheet(ws)
     const whole = a.defaultSection?.trim().toUpperCase()
     if (parsed.needsSection && !(whole && /^[A-Z]$/.test(whole)))
       throw new Error("This sheet's classes don't name a section. Say which section the batch is (e.g. D).")

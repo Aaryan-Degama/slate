@@ -48,6 +48,10 @@ const parseTimetable = (client.queries as unknown as {
 
 type Batch = { program: string; branch: string; semester: number }
 
+// Must match TEMPLATE_HEADERS in amplify/functions/parse-timetable/reader.ts.
+const TEMPLATE_HEADERS = ['Day', 'Start', 'End', 'Course', 'Type', 'Section', 'Room', 'Faculty']
+const TEMPLATE_URL = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_HEADERS.join(',') + '\n')}`
+
 export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'parsing' | 'results' | 'applying' | 'applied'>('idle')
   const [error, setError] = useState('')
@@ -161,6 +165,13 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
           disabled={status === 'uploading' || status === 'parsing' || status === 'applying'}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
+        <p className="meta">
+          A sheet that doesn't read (0 classes)? Copy it into the{' '}
+          <a href={TEMPLATE_URL} download="slate-timetable-template.csv">
+            Slate timetable template
+          </a>{' '}
+          (one row per class: {TEMPLATE_HEADERS.join(', ')}) and upload that instead.
+        </p>
         {status === 'uploading' && <p>Uploading {fileName} to S3...</p>}
         {status === 'parsing' && <p>Reading {fileName}...</p>}
         {error && <p className="error">{error}</p>}
@@ -192,7 +203,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                   key={s.sheet}
                   className={selected?.sheet === s.sheet ? 'active' : ''}
                   disabled={s.rows.length === 0}
-                  title={s.rows.length === 0 ? 'No classes in a format this reader understands yet' : undefined}
+                  title={s.rows.length === 0 ? 'No classes in a format this reader understands; use the Slate timetable template' : undefined}
                   onClick={() => pickSheet(s)}
                 >
                   {s.sheet} · timetable · {s.rows.length} classes{s.issues.length ? ` · ${s.issues.length} flagged` : ''}

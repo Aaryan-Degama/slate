@@ -2,6 +2,7 @@
 // best guess at which column is which. The admin confirms the mapping in
 // the app before anything is interpreted or saved.
 import type { Worksheet } from 'exceljs'
+import { cellText } from './reader'
 
 export type ColumnGuess = {
   roll: number | null
@@ -27,7 +28,7 @@ const SECTION_VALUE = /^[A-Za-z]$/
 const SUBSECTION_VALUE = /^[A-Za-z]\d$/
 
 export function readTable(ws: Worksheet): TableResult {
-  const text = (r: number, c: number) => (ws.getCell(r, c).text ?? '').toString().trim()
+  const text = (r: number, c: number) => cellText(ws, r, c)
   const maxCol = ws.columnCount
   const nonEmpty = (r: number) => Array.from({ length: maxCol }, (_, i) => text(r, i + 1)).filter(Boolean).length
 
