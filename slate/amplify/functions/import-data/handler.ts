@@ -26,6 +26,7 @@ type Args = {
   sectionOverride?: string | null
   subSectionOverride?: string | null
   defaultSection?: string | null
+  onlySections?: (string | null)[] | null
   removeMissing?: boolean | null
   dryRun: boolean
 }
@@ -108,7 +109,10 @@ export const handler = async (event: Event) => {
     const whole = a.defaultSection?.trim().toUpperCase()
     if (parsed.needsSection && !(whole && /^[A-Z]$/.test(whole)))
       throw new Error("This sheet's classes don't name a section. Say which section the batch is (e.g. D).")
-    const rows = parsed.rows.map((r) => ({
+    const only = (a.onlySections ?? []).filter((x): x is string => !!x).map((x) => x.trim().toUpperCase())
+    const rows = parsed.rows
+      .filter((r) => !only.length || only.includes(r.section === WHOLE_BATCH ? whole! : r.section))
+      .map((r) => ({
       ...batch,
       day: r.day,
       startTime: r.startTime,

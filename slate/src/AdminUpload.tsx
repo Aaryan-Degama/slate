@@ -61,6 +61,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [selectedTable, setSelectedTable] = useState<TableSheet | null>(null)
   const [batch, setBatch] = useState<Batch | null>(null)
   const [wholeSection, setWholeSection] = useState('')
+  const [onlySections, setOnlySections] = useState('')
   const [diff, setDiff] = useState<ImportResult | null>(null)
   const [fileKey, setFileKey] = useState('')
   const [removeMissing, setRemoveMissing] = useState(false)
@@ -98,6 +99,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
     setDiff(null)
     setRemoveMissing(false)
     setWholeSection('')
+    setOnlySections('')
     const b = s.batch
     setBatch(b.program && b.branch && b.semester ? { program: b.program, branch: b.branch, semester: b.semester } : null)
   }
@@ -113,6 +115,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
         kind: 'timetable',
         ...batch,
         defaultSection: selected.needsSection ? wholeSection : null,
+        onlySections: onlySections.split(/[,\s]+/).filter(Boolean),
         removeMissing,
         dryRun,
       })
@@ -239,6 +242,18 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                 onChange={(e) => setBatch({ ...(batch ?? { program: '', branch: '' }), semester: Number(e.target.value) })}
               />
             </div>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              Only these sections (optional, for a sheet that mixes branches):
+              <input
+                placeholder="e.g. A, B, C, C2"
+                value={onlySections}
+                onChange={(e) => {
+                  setOnlySections(e.target.value.toUpperCase())
+                  setDiff(null)
+                }}
+                style={{ width: 180 }}
+              />
+            </label>
             {selected.needsSection && (
               <label style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 This sheet's classes don't name a section (one section for the whole batch). Which section is it?

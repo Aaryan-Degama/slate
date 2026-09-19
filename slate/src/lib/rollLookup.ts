@@ -8,7 +8,7 @@ import { listAll } from './listAll'
 const client = generateClient<Schema>()
 
 // IIITA emails look like iit<admissionYear><rollNumber>@iiita.ac.in.
-const EMAIL_RE = /^[a-z]{2,4}(\d{4})(\d+)@iiita\.ac\.in$/i
+const EMAIL_RE = /^([a-z]{2,4})(\d{4})(\d+)@iiita\.ac\.in$/i
 
 export type ResolvedSection = {
   program: string
@@ -45,11 +45,15 @@ const isSub = (s: string) => /^[A-Z]\d$/i.test(s)
 export async function resolveSectionFromEmail(email: string): Promise<ResolvedSection | null> {
   const match = email.match(EMAIL_RE)
   if (!match) return null
-  const [, admissionYear, rollStr] = match
+  const [, prefix, admissionYear, rollStr] = match
   const roll = parseInt(rollStr, 10)
+  // Roll numbers restart per branch (IIT2026001 and IEC2026001 both exist),
+  // so the prefix picks the branch: IIT -> IT, IEC -> EC.
+  const branch = prefix.slice(1).toUpperCase()
+  const sameBranch = <T extends { branch: string }>(rows: T[]) => rows.filter((r) => r.branch.toUpperCase() === branch)
 
   const { data: students } = await listStudentSections()
-  const mine = students
+  const mine = sameBranch(students)
     .filter((s) => s.admissionYear === admissionYear && s.rollNumber === roll)
     .sort((a, b) => b.semester - a.semester)[0]
   if (mine) {
@@ -63,7 +67,7 @@ export async function resolveSectionFromEmail(email: string): Promise<ResolvedSe
   }
 
   const { data: ranges } = await listRollRanges()
-  const hits = ranges.filter((r) => r.admissionYear === admissionYear && roll >= r.minRoll && roll <= r.maxRoll)
+  const hits = sameBranch(ranges).filter((r) => r.admissionYear === admissionYear && roll >= r.minRoll && roll <= r.maxRoll)
   const whole = hits.find((r) => !isSub(r.section))
   const sub = hits.find((r) => isSub(r.section))
   const base = whole ?? sub

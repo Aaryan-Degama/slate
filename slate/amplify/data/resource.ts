@@ -194,6 +194,8 @@ const schema = a.schema({
       subSectionOverride: a.string(),
       // Timetables whose classes name no section (single-section batch).
       defaultSection: a.string(),
+      // Import only these sections (a sheet mixing branches, e.g. 1st sem).
+      onlySections: a.string().array(),
       removeMissing: a.boolean(),
       dryRun: a.boolean().required(),
     })

@@ -18,6 +18,7 @@ export type ImportArgs = {
   sectionOverride?: string | null
   subSectionOverride?: string | null
   defaultSection?: string | null
+  onlySections?: string[]
   removeMissing?: boolean
   dryRun: boolean
 }
