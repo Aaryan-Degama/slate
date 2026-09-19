@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Build the frontend and publish it to Amplify Hosting (manual deploy, no
-# Git connection): https://main.dosqfo1xoqa7l.amplifyapp.com
+# Git connection): https://main.d1hpc7rjskshni.amplifyapp.com
 # Uses the backend in amplify_outputs.json. Needs the `slate` AWS profile.
+# APP_ID/BRANCH/REGION can be overridden via env for a different deployment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_ID=dosqfo1xoqa7l
-BRANCH=main
-REGION=ap-south-1
+APP_ID=${APP_ID:-d1hpc7rjskshni}
+BRANCH=${BRANCH:-main}
+REGION=${REGION:-ap-south-1}
 export AWS_PROFILE=${AWS_PROFILE:-slate}
 
 npm run build
