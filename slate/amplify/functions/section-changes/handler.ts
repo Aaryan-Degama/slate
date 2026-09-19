@@ -15,7 +15,9 @@ import { CEDAR_WASM_BASE64, POLICY } from './embedded.gen'
 initSync({ module: Buffer.from(CEDAR_WASM_BASE64, 'base64') })
 
 type Identity = { sub: string; groups?: string[] | null; claims?: { email?: string } }
-type Event = { info: { fieldName: string }; arguments: Record<string, unknown>; identity: Identity }
+// Amplify's function resolver puts fieldName at the top level; a plain
+// AppSync Lambda resolver puts it under info. Accept both.
+type Event = { fieldName?: string; info?: { fieldName: string }; arguments: Record<string, unknown>; identity: Identity }
 type Row = Record<string, unknown>
 type Section = { program: string; branch: string; semester: number; section: string }
 
@@ -98,7 +100,8 @@ const change = (fields: Row, changedBy: string) => {
 export const handler = async (event: Event) => {
   const { identity } = event
   const args = event.arguments
-  switch (event.info.fieldName) {
+  const field = event.fieldName ?? event.info?.fieldName
+  switch (field) {
     case 'claimCr': {
       const mine = await sectionOf(identity.claims?.email ?? '')
       if (!mine) throw new Error("Your section couldn't be found from your roll number, so you can't claim CR yet.")
@@ -158,5 +161,5 @@ export const handler = async (event: Event) => {
       return JSON.stringify({ undone: id })
     }
   }
-  throw new Error(`Unknown field ${event.info.fieldName}`)
+  throw new Error(`Unknown field ${field}`)
 }
