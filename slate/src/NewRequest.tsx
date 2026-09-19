@@ -269,6 +269,12 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
         </div>
       ))}
 
+      <p className="meta">
+        {chosen.length
+          ? `Selected: ${chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')}`
+          : 'No sections selected yet. Click one or more above.'}
+      </p>
+
       <fieldset>
         <legend>Constraints</legend>
         <label>

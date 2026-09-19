@@ -254,6 +254,17 @@ fieldset legend {
   gap: 8px;
 }
 
+.option-list button.active,
+.option-list button.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.option-list button.active::before {
+  content: '✓ ';
+}
+
 .free-slot-picker {
   display: flex;
   flex-wrap: wrap;
