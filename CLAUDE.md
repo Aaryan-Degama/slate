@@ -95,9 +95,10 @@ No OpenSearch, RDS, NAT Gateway, ECS/Fargate, EKS, or EC2. Everything scales to 
 User            owner, email, role (STUDENT|ADMIN, display only; ADMIN
                 rights come from the Cognito ADMIN group), linkedSection,
                 changesSeenAt
-TimetableSlot   program, branch, semester, section ('*' = whole batch,
-                used for electives), day, startTime, endTime, courseId,
-                room, faculty, sessionType (L/P/T), isElective
+TimetableSlot   program, branch, semester, section ('*' = whole batch:
+                an elective basket, or a class the sheet labels "All"),
+                day, startTime, endTime, courseId, room, faculty,
+                sessionType (L/P/T), isElective
 StudentSection  admissionYear, rollNumber, program, branch, semester,
                 section, subSection         -- admin-uploaded student lists
 RollRange       admissionYear, program, branch, semester, minRoll,

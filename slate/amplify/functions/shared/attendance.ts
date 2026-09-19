@@ -97,9 +97,11 @@ export function attended(h: Home, slots: Row[], enrollments: Row[]): Attended {
   const electivesKnown = adds.some((e) => electiveCourses.has(String(e.courseId)))
 
   const picked = new Map<string, Row>()
-  // Home section's regular (non-elective) classes, minus drops.
+  // Home section's regular (non-elective) classes, minus drops. A
+  // whole-batch class that isn't an elective ("All" in the sheet) is
+  // attended by everyone in the batch.
   for (const r of homeBatch)
-    if (r.section !== '*' && !r.isElective && !drops.has(String(r.courseId)) && inHome(String(r.section), h)) picked.set(String(r.id), r)
+    if (!r.isElective && !drops.has(String(r.courseId)) && (r.section === '*' || inHome(String(r.section), h))) picked.set(String(r.id), r)
   // Electives: until any are known, all of them (unconfirmed).
   if (!electivesKnown) for (const r of homeBatch) if ((r.section === '*' || r.isElective) && !drops.has(String(r.courseId))) picked.set(String(r.id), r)
   // Additions: that course's classes for that group.

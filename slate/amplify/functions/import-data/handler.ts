@@ -112,7 +112,9 @@ export const handler = async (event: Event) => {
       throw new Error("This sheet's classes don't name a section. Say which section the batch is (e.g. D).")
     const only = (a.onlySections ?? []).filter((x): x is string => !!x).map((x) => x.trim().toUpperCase())
     const rows = parsed.rows
-      .filter((r) => !only.length || only.includes(r.section === WHOLE_BATCH ? whole! : r.section))
+      // Electives keep section '*' (the whole batch is offered them; who
+      // attends comes from Enrollment), so a section filter never drops them.
+      .filter((r) => r.isElective || !only.length || only.includes(r.section === WHOLE_BATCH ? whole! : r.section))
       .map((r) => ({
       ...batch,
       day: r.day,
@@ -120,9 +122,10 @@ export const handler = async (event: Event) => {
       endTime: r.endTime,
       courseId: r.courseId,
       sessionType: r.sessionType,
-      section: r.section === WHOLE_BATCH ? whole! : r.section,
+      section: r.isElective || r.section !== WHOLE_BATCH ? r.section : whole!,
       room: r.room || undefined,
       faculty: r.faculty,
+      isElective: r.isElective || undefined,
     }))
     const key = (r: Record<string, unknown>) => `${r.day}|${r.courseId}|${r.sessionType ?? ''}|${r.section}|${r.startTime}`
     const existing = (await scanAll(TT)).filter(inBatch)
@@ -132,7 +135,7 @@ export const handler = async (event: Event) => {
     const changed = rows.flatMap((r) => {
       const cur = byKey.get(key(r))
       if (!cur) return []
-      const fields = (['endTime', 'room', 'faculty'] as const).filter((f) => (cur[f] ?? null) !== (r[f] ?? null))
+      const fields = (['endTime', 'room', 'faculty', 'isElective'] as const).filter((f) => (cur[f] ?? null) !== (r[f] ?? null))
       return fields.length ? [{ cur, next: r, fields }] : []
     })
     const removed = existing.filter((e) => !seen.has(key(e)))

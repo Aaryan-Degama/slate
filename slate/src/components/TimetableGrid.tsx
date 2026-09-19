@@ -213,7 +213,7 @@ function CourseBlock({
             {b.section && (
               <>
                 <span className="section-dot">·</span>
-                <span className="section-label">Sec {b.section}</span>
+                <span className="section-label">{b.section === '*' ? 'Elective' : `Sec ${b.section}`}</span>
               </>
             )}
           </span>
