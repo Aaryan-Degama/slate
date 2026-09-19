@@ -16,6 +16,7 @@ const schema = a.schema({
   // CANCELLED: a regular class called off on one date. EXTRA: a one-off
   // class. MOVED_FROM/MOVED_TO: the two halves of a move (same groupId).
   ChangeKind: a.enum(['CANCELLED', 'EXTRA', 'MOVED_FROM', 'MOVED_TO']),
+  EnrollmentAction: a.enum(['ADD', 'DROP']),
 
   User: a
     .model({
@@ -57,6 +58,10 @@ const schema = a.schema({
       // tag in the source cell text -- captured during extraction but
       // originally discarded; backfilled from the same real source.
       sessionType: a.string(),
+      // A batch-wide elective (section '*'): attended only by students
+      // enrolled in it; until enrollments exist, shown to everyone as
+      // "elective (registration not uploaded)".
+      isElective: a.boolean(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
@@ -264,23 +269,24 @@ const schema = a.schema({
     .handler(a.handler.function(importData))
     .authorization((allow) => [allow.group('ADMIN')]),
 
-  // Per-student course registration -- currently only meaningful for
-  // electives, since core courses are already implied by section
-  // membership in TimetableSlot. Intentionally left EMPTY for now: we
-  // don't have real per-student registration data yet. Schema exists so
-  // an admin-run ingestion pipeline (planned: OCR over registration
-  // sheets) has somewhere real to write once that data exists -- not
-  // fabricated here.
-  CourseRegistration: a
+  // Per-student exceptions to "you attend your home section's classes"
+  // (CLAUDE.md §4): ADD = roll X attends course C with section S of batch B
+  // (a drop-year/backlog student, or an elective choice; section '*' for a
+  // batch-wide elective); DROP = roll X doesn't take course C in their home
+  // section. Admin-uploaded; admin-only (it's personal). Students see the
+  // result through the mySection query.
+  Enrollment: a
     .model({
-      rollNumber: a.string().required(),
-      admissionYear: a.string().required(),
+      rollId: a.string().required(), // "IIT2023045", the email prefix upper-cased
+      courseId: a.string().required(),
+      action: a.ref('EnrollmentAction').required(),
+      // ADD: the group attended. DROP: the student's own batch.
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),
-      courseId: a.string().required(),
+      section: a.string(), // ADD only
     })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.group('ADMIN')]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

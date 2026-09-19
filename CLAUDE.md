@@ -39,6 +39,7 @@ At IIIT Allahabad, timetable changes (a cancelled lecture, a makeup class, a cla
 - **Section**: A, B, C, with sub-groups B1/B2 belonging to B. A student's section comes from their roll number (admin-uploaded student lists / roll ranges), never from their own choice.
 - **Regular class**: a weekly `TimetableSlot` row, ingested, read-only except admin corrections.
 - **Occurrence**: a regular class on a specific date.
+- **Who attends a class**: a student attends their home section's classes, adjusted by their `Enrollment` exceptions (ADD a course with another section/batch, DROP one, or pick an elective). With no exceptions uploaded, that's exactly their section's timetable.
 - **Change** (always dated): **Cancelled** (an occurrence called off), **Extra** (a one-off class), or **Moved** (a linked cancel + extra). A change reaches the sections of that course taught by the same professor as the CR's section (a course can have a different professor per section: IML in IT Sem 5 has three), and records who made it (CR roll number and section) and when. Undo keeps the record, marked "undone by …".
 - **Effective timetable** for a date = regular classes that weekday − cancellations that date + extras that date. Computed, never stored.
 
@@ -101,8 +102,11 @@ StudentSection  admissionYear, rollNumber, program, branch, semester,
                 section, subSection         -- admin-uploaded student lists
 RollRange       admissionYear, program, branch, semester, minRoll,
                 maxRoll, section            -- fallback roll -> section
-CourseRegistration  rollNumber, admissionYear, program, branch,
-                semester, courseId          -- admin-uploaded electives
+Enrollment      rollId ("IIT2023045"), courseId, action ADD|DROP,
+                program, branch, semester, section  -- exceptions to
+                "you attend your home section's classes": a course taken
+                with another section/batch (drop-year, backlog), a course
+                not taken, or an elective choice (section '*')
 ClassRep        sectionKey ("program|branch|semester|section"), program,
                 branch, semester, section, sub, email
 ScheduleChange  one row per affected section:
@@ -123,7 +127,8 @@ All writes to `ScheduleChange` and `ClassRep` go through the `section-changes` L
 Input: a course in the CR's batch, the sections taking it (pre-selected, deselectable), candidate dates, and constraints (time window, length).
 
 1. For each candidate date, build each section's effective busy set: regular classes that weekday, minus cancellations that date, plus extras that date, plus the batch's electives (treated as busy, conservatively).
-2. Add the course professor's busy set: their regular classes and extras in **any** batch.
+2. Add the course professor's busy set: their regular classes and extras in **any** batch. Sections and the professor are **hard**: a slot must be free for all of them.
+2a. Add every *irregular* attendee (a student whose `Enrollment` exceptions make their timetable differ, e.g. a drop-year student taking this course with these sections), grouped by identical timetables so the work stays small. These are **soft**: slots that clash are still offered, ranked last, naming who clashes and with what.
 3. Intersect free intervals across all of them; filter by the constraints.
 4. Rank: avoids lunch (12–2:30), within 9–5:30, not at the edge of anyone's day. Attach a free room.
 5. If nothing survives: report the single section, or the professor, whose removal unblocks the most slots, and what they have then.

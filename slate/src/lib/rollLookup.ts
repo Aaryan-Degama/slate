@@ -5,6 +5,7 @@
 // verified email.
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../../amplify/data/resource'
+import type { Attended } from '../../amplify/functions/shared/attendance'
 
 const client = generateClient<Schema>()
 
@@ -15,6 +16,8 @@ export type ResolvedSection = {
   section: string
   /** B1/B2-style group, when the batch splits and it's known. */
   subSection?: string
+  /** Exactly which classes this student attends (home section + enrollment exceptions). */
+  attends?: Attended
 }
 
 type Query = () => Promise<{ data: unknown; errors?: { message: string }[] }>

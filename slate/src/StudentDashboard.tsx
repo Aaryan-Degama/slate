@@ -21,6 +21,7 @@ import { toActions, type Action } from './lib/changes'
 import ActionLine from './components/ActionLine'
 import type { Profile } from './lib/useMyProfile'
 import { resolveSectionFromEmail } from './lib/rollLookup'
+import { touches } from '../amplify/functions/shared/attendance'
 import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
@@ -167,7 +168,16 @@ function MyTimetable({
   seenAt,
   markSeen,
 }: { section: SectionRef; email: string } & RepProps) {
-  const [data, setData] = useState<{ batch: TimetableSlotRow[]; slots: TimetableSlotRow[]; changes: ScheduleChangeRow[] } | null>(null)
+  const [data, setData] = useState<{
+    batch: TimetableSlotRow[]
+    /** Home section's classes: what a CR acts on. */
+    home: TimetableSlotRow[]
+    /** The classes this student actually attends (may include other batches). */
+    slots: TimetableSlotRow[]
+    changes: ScheduleChangeRow[]
+    electivesUnconfirmed: boolean
+    irregular: boolean
+  } | null>(null)
   const [monday, setMonday] = useState(() => mondayOf(todayIst()))
   const [groups, setGroups] = useState<{ section: string; subSection?: string; unknownSplit: string[] }>({
     section: section.section,
@@ -203,17 +213,28 @@ function MyTimetable({
           ? []
           : [...new Set(batch.map((r) => r.section).filter((s) => s.length === 2 && s[0] === picked.section))].sort()
         setGroups({ section: picked.section, subSection, unknownSplit })
+        const home = batch.filter((r) => mine(r.section))
+        // The server knows exactly which classes this student attends (home
+        // section + enrollment exceptions). Use it when it's about the
+        // section shown; otherwise (a self-picked section) fall back to it.
+        const att =
+          resolved?.attends && resolved.program === section.program && resolved.branch === section.branch && resolved.semester === section.semester && resolved.section === picked.section
+            ? resolved.attends
+            : null
+        const ids = att ? new Set(att.slotIds) : null
         setData({
           batch,
-          slots: batch.filter((r) => mine(r.section)),
-          changes: changes.data.filter(
-            (r) =>
-              r.date &&
-              r.program === section.program &&
-              r.branch === section.branch &&
-              r.semester === section.semester &&
-              mine(r.section),
+          home,
+          slots: ids ? slots.data.filter((r) => ids.has(r.id!)) : home,
+          changes: changes.data.filter((r) =>
+            !r.date
+              ? false
+              : att
+                ? touches(r, att)
+                : r.program === section.program && r.branch === section.branch && r.semester === section.semester && mine(r.section),
           ),
+          electivesUnconfirmed: att?.electivesUnconfirmed ?? false,
+          irregular: att?.irregular ?? false,
         })
         setLoadError('')
       })
@@ -237,7 +258,7 @@ function MyTimetable({
   const dayLabels = Object.fromEntries(DAYS.map((d) => [d, formatDate(dateIn(monday, d))]))
 
   // Courses this CR can act for: every course their section takes.
-  const myCourses = [...new Set(data.slots.map((r) => r.courseId))].sort()
+  const myCourses = [...new Set(data.home.map((r) => r.courseId))].sort()
   // Sections a change to `course` reaches: the ones taught by the same
   // professor as this section (same rule as the server).
   const sectionsOf = (course: string) => {
@@ -290,6 +311,12 @@ function MyTimetable({
           your group yet, so those classes aren't shown. Your admin needs to upload the {groups.unknownSplit.join('/')}{' '}
           list.
         </p>
+      )}
+      {data.irregular && (
+        <p className="meta">Your timetable includes courses you take outside your section, from your registrations.</p>
+      )}
+      {data.electivesUnconfirmed && (
+        <p className="meta">Showing every elective of your batch: your elective registrations haven't been uploaded yet.</p>
       )}
       {data.slots.length === 0 && (
         <p className="error">

@@ -36,10 +36,23 @@ const findSlots = (client.queries as unknown as {
 
 type SlotRow = BusyEntry & { id: string; program: string; branch: string; semester: number; section: string; faculty?: string | null }
 type ChangeRow = ChangeEntry & { program: string; branch: string; semester: number; section: string }
-type Proposed = { date: string; day: string; start: string; end: string; score: number; reason: string; room: string | null }
+type Proposed = {
+  date: string
+  day: string
+  start: string
+  end: string
+  score: number
+  reason: string
+  room: string | null
+  /** Irregular attendees (e.g. drop-year students) who have another class then. */
+  clashCount: number
+  clashes: { students: string[]; has: string }[]
+}
 type Result = {
   slots: Proposed[]
   totalFree: number
+  totalWithClashes: number
+  irregulars: number
   professors: string[]
   blocking: { party: string; kind: string; unlocks: number; example: string | null; detail: string } | null
 }
@@ -248,8 +261,10 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
         <h1>{mode === 'move' ? `Move ${courseId}` : `Extra ${courseId} class`}</h1>
         <p className="subtitle">
           Sec {sections.join(', ')}
-          {result.professors.length ? ` · ${result.professors.join(' & ')}` : ''} · {result.totalFree} slot(s) free for
-          everyone
+          {result.professors.length ? ` · ${result.professors.join(' & ')}` : ''}
+          {result.irregulars ? ` · ${result.irregulars} attending student(s) with their own timetable` : ''} ·{' '}
+          {result.totalFree} slot(s) free for everyone
+          {result.totalWithClashes > result.totalFree ? `, ${result.totalWithClashes - result.totalFree} more with a few clashes` : ''}
         </p>
 
         {result.slots.length > 0 ? (
@@ -264,6 +279,12 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
                   <span className="meta">{s.room ? `Room ${s.room} is free` : 'No free room found'}</span>
                 </div>
                 <p className="meta">{s.reason}</p>
+                {s.clashCount > 0 && (
+                  <p className="error">
+                    Clashes for {s.clashCount} student(s):{' '}
+                    {s.clashes.map((c) => `${c.students.join(', ')} (${c.has})`).join('; ')}. Tell them directly if you pick it.
+                  </p>
+                )}
                 <button type="button" className="primary" disabled={saving !== null} onClick={() => save(s)}>
                   {saving === s ? 'Saving...' : mode === 'move' ? 'Move here' : 'Add this class'}
                 </button>

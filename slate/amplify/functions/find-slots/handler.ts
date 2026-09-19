@@ -1,14 +1,20 @@
-// Slot finding (CLAUDE.md §5). For each candidate *date*: every affected
-// section's effective timetable (regular classes that weekday, minus that
-// date's cancellations, plus that date's extra classes, plus the batch's
-// electives) and the course professor's (their classes in any batch).
-// Free intervals are intersected, filtered by the constraints, ranked with
-// simple explainable rules, given a free room -- and when nothing works,
-// the one section or professor whose absence opens up the most slots is
-// named, with what they have then.
+// Slot finding (CLAUDE.md §5). For each candidate *date*, everyone who
+// attends the class must be free:
+// - each affected section's effective timetable (regular classes that
+//   weekday, minus that date's cancellations, plus that date's extras, plus
+//   the batch's electives) and the course professor's in any batch -- hard:
+//   a slot must be free for all of them;
+// - every *irregular* attendee (a student with enrollment exceptions, e.g.
+//   a drop-year student taking this course with these sections), grouped
+//   by identical timetables -- soft: slots that clash with some of them
+//   are still offered, ranked after clash-free ones, naming who clashes.
+// Ranked with simple explainable rules and given a free room; when nothing
+// is free for the hard parties, the one section or professor whose
+// absence opens up the most slots is named, with what they have then.
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb'
 import { HOURS } from '../../../src/lib/grid'
+import { attended, heldFor, homeOf, sameBatch, touches } from '../shared/attendance'
 
 type Group = { program: string; branch: string; semester: number; section: string }
 type Args = {
@@ -23,12 +29,15 @@ type Args = {
 type Row = Record<string, unknown>
 type Busy = { date: string; start: string; end: string; room?: string; label: string }
 /** One timetable that must be free: a section, or a professor. */
-type Party = { name: string; kind: 'section' | 'professor'; busy: Busy[] }
+type Party = { name: string; kind: 'section' | 'professor' | 'students'; busy: Busy[]; students?: string[] }
 type Candidate = { date: string; day: string; start: string; end: string }
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const TT = process.env.TIMETABLE_SLOT_TABLE!
 const SC = process.env.SCHEDULE_CHANGE_TABLE!
+const SS = process.env.STUDENT_SECTION_TABLE!
+const RR = process.env.ROLL_RANGE_TABLE!
+const EN = process.env.ENROLLMENT_TABLE!
 
 async function scanAll(table: string): Promise<Row[]> {
   const items: Row[] = []
@@ -87,7 +96,7 @@ export const handler = async (event: { arguments: Args }) => {
   const dates = [...new Set((a.dates ?? []).filter((d): d is string => /^\d{4}-\d{2}-\d{2}$/.test(String(d))))].sort()
   if (!dates.length) throw new Error('Pick at least one date.')
 
-  const [slots, changes] = await Promise.all([scanAll(TT), scanAll(SC)])
+  const [slots, changes, students, ranges, enrollments] = await Promise.all([scanAll(TT), scanAll(SC), scanAll(SS), scanAll(RR), scanAll(EN)])
   const live = changes.filter((c) => !c.undoneAt && c.date && dates.includes(String(c.date)))
   // A regular class is off on a date if a live cancellation/move points at it.
   const offOn = new Set(live.filter((c) => removes(c.kind)).map((c) => `${c.relatedSlotId}|${c.date}`))
@@ -132,6 +141,35 @@ export const handler = async (event: { arguments: Args }) => {
       ]
     : []
   for (const prof of professors) parties.push({ name: prof, kind: 'professor', busy: held((r) => r.faculty === prof) })
+  const hard = parties.length
+
+  // Irregular attendees: students with enrollment exceptions who attend this
+  // course with one of these sections. Grouped by identical timetables.
+  if (a.courseId) {
+    const profiles = new Map<string, Party>()
+    for (const rollId of new Set(enrollments.map((e) => String(e.rollId)))) {
+      const home = homeOf(rollId, students, ranges)
+      if (!home) continue
+      const att = attended(home, slots, enrollments)
+      const inClass = att.groups.some((g) => g.courseId === a.courseId && groups.some((G) => sameBatch(g, G) && (heldFor(g.section, G.section) || heldFor(G.section, g.section))))
+      if (!inClass) continue
+      const key = [...att.slotIds].sort().join(',')
+      const mine = new Set(att.slotIds)
+      if (!profiles.has(key))
+        profiles.set(key, {
+          name: '',
+          kind: 'students',
+          students: [],
+          busy: held((r) => mine.has(String(r.id)) || (r.kind !== undefined && touches(r, att))),
+        })
+      profiles.get(key)!.students!.push(rollId)
+    }
+    for (const p of profiles.values()) {
+      p.name = p.students!.join(', ')
+      parties.push(p)
+    }
+  }
+  const irregulars = parties.slice(hard).reduce((n, p) => n + p.students!.length, 0)
 
   const n = Math.max(1, Math.ceil((a.minDurationMins ?? 60) / 60))
   const earliest = a.earliestTime || '00:00'
@@ -182,15 +220,32 @@ export const handler = async (event: { arguments: Args }) => {
     return { score, reason: why.join(' · ') }
   }
 
-  const all = parties.map((_, i) => i)
+  // Hard: sections + professor must be free. Soft: irregular students --
+  // count who clashes, clash-free slots first.
+  const all = parties.slice(0, hard).map((_, i) => i)
+  const soft = parties.map((_, i) => i).slice(hard)
   const common = cands.filter((c) => all.every((pi) => freeFor(c, pi)))
   const ranked = common
-    .map((c) => ({ ...c, ...rank(c), room: freeRoom(c) }))
-    .sort((x, y) => y.score - x.score || x.date.localeCompare(y.date) || x.start.localeCompare(y.start))
+    .map((c) => {
+      const clashes = soft
+        .filter((pi) => !freeFor(c, pi))
+        .map((pi) => ({ students: parties[pi].students!, has: clashOf(c, pi)?.label ?? 'a class' }))
+      const r = rank(c)
+      const n = clashes.reduce((k, x) => k + x.students.length, 0)
+      return {
+        ...c,
+        ...r,
+        reason: irregulars ? `${r.reason} · ${n ? `${n} of ${irregulars} irregular student(s) clash` : `free for all ${irregulars} irregular student(s) too`}` : r.reason,
+        room: freeRoom(c),
+        clashCount: n,
+        clashes,
+      }
+    })
+    .sort((x, y) => x.clashCount - y.clashCount || y.score - x.score || x.date.localeCompare(y.date) || x.start.localeCompare(y.start))
 
   // Nothing works: whose absence (a section's, or the professor's) opens up the most slots?
   let blocking: { party: string; kind: string; unlocks: number; example: string | null; detail: string } | null = null
-  if (!ranked.length && parties.length > 1) {
+  if (!ranked.length && hard > 1) {
     const options = all.map((pi) => ({ pi, opened: cands.filter((c) => all.every((o) => o === pi || freeFor(c, o))) }))
     const best = options.sort((x, y) => y.opened.length - x.opened.length)[0]
     const who = parties[best.pi]
@@ -219,10 +274,12 @@ export const handler = async (event: { arguments: Args }) => {
     }
   }
 
-  console.log(JSON.stringify({ event: 'slots-found', groups: a.groups, dates, courseId: a.courseId ?? null, professors, hours: n, candidates: cands.length, common: ranked.length, blocking: blocking?.party ?? null }))
+  console.log(JSON.stringify({ event: 'slots-found', groups: a.groups, dates, courseId: a.courseId ?? null, professors, irregulars, hours: n, candidates: cands.length, common: ranked.length, blocking: blocking?.party ?? null }))
   return JSON.stringify({
-    slots: ranked.slice(0, 12).map(({ date, day, start, end, score, reason, room }) => ({ date, day, start, end, score, reason, room })),
-    totalFree: ranked.length,
+    slots: ranked.slice(0, 12).map(({ date, day, start, end, score, reason, room, clashCount, clashes }) => ({ date, day, start, end, score, reason, room, clashCount, clashes })),
+    totalFree: ranked.filter((r) => r.clashCount === 0).length,
+    totalWithClashes: ranked.length,
+    irregulars,
     professors,
     blocking,
   })

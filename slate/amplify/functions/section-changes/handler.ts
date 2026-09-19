@@ -17,6 +17,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { BatchWriteCommand, DynamoDBDocumentClient, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { initSync, isAuthorized, type CedarValueJson } from '@cedar-policy/cedar-wasm/web'
 import { CEDAR_WASM_BASE64, POLICY } from './embedded.gen'
+import { attended, homeOf } from '../shared/attendance'
 
 initSync({ module: Buffer.from(CEDAR_WASM_BASE64, 'base64') })
 
@@ -31,7 +32,7 @@ type Entity = { uid: { type: string; id: string }; attrs: Record<string, CedarVa
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const env = (k: string) => process.env[k]!
-const [SC, TT, CR, SS, RR] = ['SCHEDULE_CHANGE_TABLE', 'TIMETABLE_SLOT_TABLE', 'CLASS_REP_TABLE', 'STUDENT_SECTION_TABLE', 'ROLL_RANGE_TABLE'].map(env)
+const [SC, TT, CR, SS, RR, EN] = ['SCHEDULE_CHANGE_TABLE', 'TIMETABLE_SLOT_TABLE', 'CLASS_REP_TABLE', 'STUDENT_SECTION_TABLE', 'ROLL_RANGE_TABLE', 'ENROLLMENT_TABLE'].map(env)
 
 async function scanAll(table: string): Promise<Row[]> {
   const items: Row[] = []
@@ -50,39 +51,10 @@ const inBatch = (r: Row, b: Batch) => r.program === b.program && r.branch === b.
 const keyOf = (s: Row | Section) => `${batchKey(s)}|${String(s.section)[0]}`
 const user = (sub: string) => ({ type: 'Slate::User', id: sub })
 
-// IIITA emails look like iit<admissionYear><rollNumber>@iiita.ac.in; the
-// prefix picks the branch (IIT -> IT, IEC -> EC). Same rules as
-// src/lib/rollLookup.ts, but server-side so the section can be trusted.
-const EMAIL_RE = /^([a-z]{2,4})(\d{4})(\d+)@iiita\.ac\.in$/i
-/** Where the student list (or, failing that, a roll range) puts this email. */
-async function resolve(email: string): Promise<(Section & { subSection?: string }) | null> {
-  const m = email.match(EMAIL_RE)
-  if (!m) return null
-  const [, prefix, year, rollStr] = m
-  const roll = parseInt(rollStr, 10)
-  const branch = prefix.slice(1).toUpperCase()
-  const ok = (r: Row) => String(r.branch).toUpperCase() === branch && r.admissionYear === year
-  const student = (await scanAll(SS))
-    .filter((r) => ok(r) && Number(r.rollNumber) === roll)
-    .sort((a, b) => Number(b.semester) - Number(a.semester))[0]
-  const base = { program: '', branch: '', semester: 0 }
-  if (student) {
-    const sec = String(student.section)
-    const sub = student.subSection ? String(student.subSection) : sec.length === 2 ? sec : undefined
-    return { ...base, program: String(student.program), branch: String(student.branch), semester: Number(student.semester), section: sec[0], ...(sub ? { subSection: sub } : {}) }
-  }
-  const hits = (await scanAll(RR)).filter((r) => ok(r) && roll >= Number(r.minRoll) && roll <= Number(r.maxRoll))
-  const whole = hits.find((r) => String(r.section).length === 1)
-  const sub = hits.find((r) => String(r.section).length === 2)
-  const hit = whole ?? sub
-  if (!hit) return null
-  return {
-    program: String(hit.program),
-    branch: String(hit.branch),
-    semester: Number(hit.semester),
-    section: String(hit.section)[0],
-    ...(sub ? { subSection: String(sub.section) } : {}),
-  }
+/** Where the student list (or, failing that, a roll range) puts this email: their home section. */
+async function resolve(email: string) {
+  const [students, ranges] = await Promise.all([scanAll(SS), scanAll(RR)])
+  return homeOf(email, students, ranges)
 }
 
 /** The caller's section for authorization: main section only (B1 -> B). */
@@ -290,7 +262,14 @@ export const handler = async (event: Event) => {
   const a = event.arguments
   const email = await emailOf(event.identity)
 
-  if (field === 'mySection') return JSON.stringify(await resolve(email))
+  if (field === 'mySection') {
+    // Home section (for the CR and the roster) plus exactly which classes
+    // this student attends (enrollment exceptions applied).
+    const home = await resolve(email)
+    if (!home) return JSON.stringify(null)
+    const [slots, enrollments] = await Promise.all([scanAll(TT), scanAll(EN)])
+    return JSON.stringify({ ...home, attends: attended(home, slots, enrollments) })
+  }
 
   if (field === 'batchRoster') {
     // Only the caller's own batch: roll numbers are shown to classmates, never across batches.

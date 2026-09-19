@@ -29,11 +29,15 @@ for (const [model, env] of [
   backend.importData.addEnvironment(env, tables[model].tableName);
 }
 
-// find-slots reads timetables and already-scheduled sessions.
+// find-slots reads timetables, changes, and who attends what (students,
+// roll ranges, enrollments) to find every attendee of a class.
 const findFn = backend.findSlots.resources.lambda;
 for (const [model, env] of [
   ['TimetableSlot', 'TIMETABLE_SLOT_TABLE'],
   ['ScheduleChange', 'SCHEDULE_CHANGE_TABLE'],
+  ['StudentSection', 'STUDENT_SECTION_TABLE'],
+  ['RollRange', 'ROLL_RANGE_TABLE'],
+  ['Enrollment', 'ENROLLMENT_TABLE'],
 ] as const) {
   tables[model].grantReadData(findFn);
   backend.findSlots.addEnvironment(env, tables[model].tableName);
@@ -48,6 +52,7 @@ for (const [model, env, write] of [
   ['TimetableSlot', 'TIMETABLE_SLOT_TABLE', false],
   ['StudentSection', 'STUDENT_SECTION_TABLE', false],
   ['RollRange', 'ROLL_RANGE_TABLE', false],
+  ['Enrollment', 'ENROLLMENT_TABLE', false],
 ] as const) {
   if (write) tables[model].grantReadWriteData(changesFn);
   else tables[model].grantReadData(changesFn);
