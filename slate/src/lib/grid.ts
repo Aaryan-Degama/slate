@@ -15,6 +15,8 @@ export const HOURS: { start: string; end: string }[] = [
   { start: '15:30', end: '16:30' },
   { start: '16:30', end: '17:30' },
   { start: '17:30', end: '18:30' },
+  // Only some sheets use it (ECE 1st sem has a 6:30-7:30 pm column).
+  { start: '18:30', end: '19:30' },
 ];
 
 export type BusyEntry = {

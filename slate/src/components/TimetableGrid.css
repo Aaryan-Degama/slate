@@ -2,7 +2,7 @@
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
-  min-width: calc(64px + 9 * 150px);
+  min-width: calc(64px + 10 * 140px);
   font-size: 14px;
   border: 1px solid var(--border);
   border-radius: 10px;

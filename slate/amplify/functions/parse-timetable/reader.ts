@@ -278,8 +278,9 @@ function parseFaculty(raw: string): Record<string, string> {
   if (!t) return {}
   const bySec: Record<string, string> = {}
   for (const m of t.matchAll(/([^,()]+?)\s*\(([^)]+)\)/g)) {
-    const tokens = m[2].trim().split(/[,\s]+/).filter(Boolean)
-    if (tokens.length && tokens.every((s) => SECTION_RE.test(s))) for (const s of tokens) bySec[s] = m[1].trim()
+    const tokens = m[2].trim().replace(/\bSec(?:tion)?\.?\s*/gi, '').split(/[,\s]+/).filter(Boolean)
+    const name = m[1].trim().replace(/^(?:and|&)\s+/i, '')
+    if (tokens.length && tokens.every((s) => SECTION_RE.test(s))) for (const s of tokens) bySec[s] = name
   }
   return Object.keys(bySec).length ? bySec : { '*': t }
 }
@@ -351,7 +352,16 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
       }
     }
   }
-  return { rows, skipped }
+  // A sheet can list the same class twice in one slot (e.g. on two
+  // sub-rows of the same day); keep one.
+  const seen = new Set<string>()
+  const unique = rows.filter((r) => {
+    const k = [r.day, r.courseId, r.sessionType, r.section, r.startTime, r.room].join('|')
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+  return { rows: unique, skipped }
 }
 
 // ---------------------------------------------------------------- step 3
