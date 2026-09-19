@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { defineFunction } from '@aws-amplify/backend';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
