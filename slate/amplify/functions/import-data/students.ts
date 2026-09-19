@@ -45,8 +45,8 @@ export function buildStudentRecords(
     let fileSub = cell(row, mapping.subSection).toUpperCase() || undefined
     // A lab-group column that just says 1/2 means <section>1/<section>2.
     if (fileSub && /^\d$/.test(fileSub) && (fileSec ?? oSec)) fileSub = `${fileSec ?? oSec}${fileSub}`
-    if (fileSec && oSec && fileSec !== oSec) problems.push(`file says section ${fileSec}, note says ${oSec}`)
-    if (fileSub && oSub && fileSub !== oSub) problems.push(`file says ${fileSub}, note says ${oSub}`)
+    if (fileSec && oSec && fileSec !== oSec) problems.push(`file says section ${fileSec}, row override says ${oSec}`)
+    if (fileSub && oSub && fileSub !== oSub) problems.push(`file says ${fileSub}, row override says ${oSub}`)
     const sub = fileSub ?? oSub
     const section = fileSec ?? oSec ?? sub?.[0]
     if (id.roll === undefined) problems.push('no readable roll number')

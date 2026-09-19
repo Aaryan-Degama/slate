@@ -17,7 +17,6 @@ export type ImportArgs = {
   admissionYear?: string | null
   sectionOverride?: string | null
   subSectionOverride?: string | null
-  note?: string | null
   removeMissing?: boolean
   dryRun: boolean
 }

@@ -25,7 +25,6 @@ type Args = {
   admissionYear?: string | null
   sectionOverride?: string | null
   subSectionOverride?: string | null
-  note?: string | null
   removeMissing?: boolean | null
   dryRun: boolean
 }
@@ -219,7 +218,6 @@ export const handler = async (event: Event) => {
       key: a.key,
       sheet: a.sheet,
       batch,
-      note: a.note ?? undefined,
       added: result.added,
       changed: result.changedCount,
       removed: a.removeMissing ? result.removed : 0,
