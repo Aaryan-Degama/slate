@@ -3,6 +3,7 @@ import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import { listAll } from './lib/listAll'
 import { runImport, type ImportResult } from './lib/importData'
+import { interpretNote, matchBatch, type NoteReading } from './lib/interpretNote'
 
 const client = generateClient<Schema>()
 
@@ -29,6 +30,10 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
   const [slots, setSlots] = useState<SlotRow[] | null>(null)
   const [batchKey, setBatchKey] = useState('')
   const [yearInput, setYearInput] = useState('')
+  const [note, setNote] = useState('')
+  const [reading, setReading] = useState<NoteReading | null>(null)
+  const [secOverride, setSecOverride] = useState('')
+  const [subOverride, setSubOverride] = useState('')
   const [check, setCheck] = useState<ImportResult | null>(null)
   const [removeMissing, setRemoveMissing] = useState(false)
   const [status, setStatus] = useState<'idle' | 'checking' | 'applying' | 'applied'>('idle')
@@ -48,6 +53,19 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
   }, [slots])
   const batch = batches.find(([k]) => k === batchKey)?.[1]
 
+  // The note only pre-fills the fields below; the admin can still change them.
+  const readNote = () => {
+    const r = interpretNote(note, batches.map(([, b]) => b))
+    setReading(r)
+    const b = matchBatch(r, batches.map(([, b]) => b))
+    if (b) setBatchKey(`${b.program}|${b.branch}|${b.semester}`)
+    if (r.admissionYear) setYearInput(r.admissionYear)
+    const hasGroupColumn = mapping.section !== null || mapping.subSection !== null
+    if (r.subSection) setSubOverride(r.subSection)
+    else if (r.section && (!hasGroupColumn || r.split)) setSecOverride(r.section)
+    setCheck(null)
+  }
+
   const run = async (dryRun: boolean) => {
     if (!batch) return
     setError('')
@@ -65,6 +83,9 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
         sectionCol: mapping.section,
         subSectionCol: mapping.subSection,
         admissionYear: yearInput || null,
+        sectionOverride: secOverride || null,
+        subSectionOverride: subOverride || null,
+        note: note || null,
         removeMissing,
         dryRun,
       })
@@ -95,11 +116,33 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
   return (
     <>
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <h2>Describe this file (optional)</h2>
+        <textarea
+          rows={2}
+          placeholder='e.g. "roll numbers of section C, IT 2024 batch, sem 5" or "B1/B2 lab split for section B, sem 5"'
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" disabled={!note.trim() || !slots} onClick={readNote}>
+            Use this note
+          </button>
+          {reading && (
+            <span className="meta">
+              {reading.understood.length
+                ? `Understood: ${reading.understood.join(' · ')}. Check the fields below.`
+                : "Couldn't pick anything out of that. Fill in the fields below."}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <h2>{sheet.detected === 'students' ? 'Student list' : "Couldn't tell what this sheet is"}</h2>
         <p className="subtitle">
           {sheet.detected === 'students'
-            ? 'Columns were matched from their headers and values. Check them before continuing.'
-            : 'Pick which column holds what. Needs a roll number or email, and a section or sub-section.'}
+            ? 'Columns were matched from their headers and values. Check them before continuing. No section column? Say which section in the note or the fields below.'
+            : 'Pick which column holds what. Needs a roll number or email.'}
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           {FIELDS.map((f) => (
@@ -177,6 +220,27 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
               reset()
             }}
             style={{ minWidth: 300 }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span>Same for every row (if the file doesn't say):</span>
+          <input
+            placeholder="Section, e.g. C"
+            value={secOverride}
+            onChange={(e) => {
+              setSecOverride(e.target.value.trim().toUpperCase())
+              reset()
+            }}
+            style={{ width: 130 }}
+          />
+          <input
+            placeholder="Sub-section, e.g. B1"
+            value={subOverride}
+            onChange={(e) => {
+              setSubOverride(e.target.value.trim().toUpperCase())
+              reset()
+            }}
+            style={{ width: 160 }}
           />
         </div>
         {!check && (

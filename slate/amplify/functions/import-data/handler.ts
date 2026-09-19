@@ -23,6 +23,9 @@ type Args = {
   sectionCol?: number | null
   subSectionCol?: number | null
   admissionYear?: string | null
+  sectionOverride?: string | null
+  subSectionOverride?: string | null
+  note?: string | null
   removeMissing?: boolean | null
   dryRun: boolean
 }
@@ -153,7 +156,10 @@ export const handler = async (event: Event) => {
       subSection: a.subSectionCol ?? null,
     }
     const batchSections = [...new Set((await scanAll(TT)).filter(inBatch).map((s) => String(s.section)))]
-    const records = buildStudentRecords(table.rows, mapping, batchSections, a.admissionYear ?? undefined)
+    const records = buildStudentRecords(table.rows, mapping, batchSections, a.admissionYear ?? undefined, {
+      section: a.sectionOverride ?? undefined,
+      subSection: a.subSectionOverride ?? undefined,
+    })
     const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [`${r.year}|${r.roll}`, r])).values()]
 
     const existing = (await scanAll(SS)).filter(inBatch)
@@ -213,6 +219,7 @@ export const handler = async (event: Event) => {
       key: a.key,
       sheet: a.sheet,
       batch,
+      note: a.note ?? undefined,
       added: result.added,
       changed: result.changedCount,
       removed: a.removeMissing ? result.removed : 0,

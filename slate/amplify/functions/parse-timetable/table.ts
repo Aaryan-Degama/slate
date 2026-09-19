@@ -71,12 +71,13 @@ export function readTable(ws: Worksheet): TableResult {
   guess.subSection = pick(SECTION_HEADER, SUBSECTION_VALUE, [guess.email, guess.roll])
   guess.section = pick(SECTION_HEADER, SECTION_VALUE, [guess.email, guess.roll, guess.subSection])
 
+  // A roll/email column is enough: the section can come from the admin's
+  // note ("these are section C") when the file has no section column.
   const hasId = guess.roll !== null || guess.email !== null
-  const hasGroup = guess.section !== null || guess.subSection !== null
   return {
     sheet: ws.name,
     kind: 'table',
-    detected: hasId && hasGroup ? 'students' : 'unknown',
+    detected: hasId ? 'students' : 'unknown',
     headers,
     rows,
     guess,

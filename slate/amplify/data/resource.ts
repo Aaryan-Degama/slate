@@ -174,6 +174,10 @@ const schema = a.schema({
       sectionCol: a.integer(),
       subSectionCol: a.integer(),
       admissionYear: a.string(),
+      // From the admin's note or the "same for every row" fields.
+      sectionOverride: a.string(),
+      subSectionOverride: a.string(),
+      note: a.string(),
       removeMissing: a.boolean(),
       dryRun: a.boolean().required(),
     })
