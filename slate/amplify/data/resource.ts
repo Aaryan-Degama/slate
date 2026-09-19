@@ -2,7 +2,7 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 import { parseTimetable } from '../functions/parse-timetable/resource';
 import { importData } from '../functions/import-data/resource';
 import { findSlots } from '../functions/find-slots/resource';
-import { confirmSlot } from '../functions/confirm-slot/resource';
+import { sectionChanges } from '../functions/section-changes/resource';
 
 /**
  * Slate's data model (see CLAUDE.md §4).
@@ -13,7 +13,6 @@ import { confirmSlot } from '../functions/confirm-slot/resource';
  */
 const schema = a.schema({
   Role: a.enum(['STUDENT', 'FACULTY', 'ADMIN']),
-  RequestStatus: a.enum(['PROPOSED', 'CONFIRMED']),
   ChangeType: a.enum(['SCHEDULED', 'CANCELLED']),
 
   User: a
@@ -57,49 +56,16 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
-  SlotRequest: a
-    .model({
-      requesterId: a.string().required(),
-      status: a.ref('RequestStatus').required(),
-      // { program, branch, section }[] — stored as JSON rather than a
-      // ref'd array of a custom type, which hits a type-inference wall
-      // in the current @aws-amplify/backend version and widens the
-      // whole model's generated client types to `string[]`.
-      sections: a.json().required(),
-      // { earliestTime?, latestTime?, allowedDays?, minDurationMins? }
-      constraints: a.json(),
-    })
-    // Creating a request is faculty-only (Cognito FACULTY group; admins
-    // too). Confirming it goes through confirmSlot (Cedar), so no updates
-    // from the app. Anyone signed in can read.
-    .authorization((allow) => [
-      allow.authenticated().to(['read']),
-      allow.groups(['FACULTY', 'ADMIN']).to(['read', 'create']),
-    ]),
-
-  // Written only by the slot-finding Lambda; the app only ever reads these.
-  ProposedSlot: a
-    .model({
-      requestId: a.id().required(),
-      day: a.string().required(),
-      startTime: a.string().required(),
-      endTime: a.string().required(),
-      room: a.string(),
-      score: a.integer().required(),
-      reason: a.string().required(),
-      // { program, branch, section } — present only when no slot works
-      blockingSection: a.json(),
-    })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
-
-  // Replaces the SES email (see CLAUDE.md §2/§3): confirming a slot writes
-  // one of these, and the student/teacher dashboards for the affected
-  // section render it as a highlight on their own timetable grid.
+  // A change to one section's timetable, made by that section's CR (or an
+  // admin) through the section-changes Lambda -- the app only reads these.
+  // SCHEDULED = an added one-off class; CANCELLED = a regular class called
+  // off. changedBy/undoneBy make every change traceable to a person; an
+  // undone change is kept (not deleted) so the history stays complete.
   ScheduleChange: a
     .model({
-      relatedRequestId: a.id().required(),
       program: a.string().required(),
       branch: a.string().required(),
+      semester: a.integer(),
       section: a.string().required(),
       day: a.string().required(),
       startTime: a.string().required(),
@@ -107,10 +73,28 @@ const schema = a.schema({
       courseId: a.string().required(),
       room: a.string(),
       changeType: a.ref('ChangeType').required(),
+      // The TimetableSlot a cancellation refers to.
+      relatedSlotId: a.id(),
+      changedBy: a.string(),
+      undoneBy: a.string(),
+      undoneAt: a.datetime(),
     })
-    // Read-only from the app: rows are written only by the confirmSlot
-    // Lambda, after the Cedar policy allows it.
     .authorization((allow) => [allow.authenticated().to(['read'])]),
+
+  // A section's class representative: the one student who may change that
+  // section's timetable. Claimed by the student (first come) through the
+  // section-changes Lambda; an admin revokes by deleting the row.
+  ClassRep: a
+    .model({
+      sectionKey: a.string().required(), // "program|branch|semester|section"
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      section: a.string().required(),
+      sub: a.string().required(), // Cognito user id
+      email: a.string().required(),
+    })
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN').to(['read', 'delete'])]),
 
   // The roll-number -> section mapping (CLAUDE.md §4a), as real data
   // instead of hardcoded app code. An admin provides ranges per
@@ -162,14 +146,18 @@ const schema = a.schema({
     .handler(a.handler.function(findSlots))
     .authorization((allow) => [allow.authenticated()]),
 
-  // Confirm: the Lambda asks Cedar (functions/confirm-slot/confirm.cedar)
-  // whether the caller may confirm this request, then writes one
-  // ScheduleChange per section. Open to every signed-in user on purpose --
-  // the policy, not the API layer, makes the decision.
-  confirmSlot: a
+  // Timetable changes, all through the section-changes Lambda, where the
+  // Cedar policy (functions/section-changes/policy.cedar) decides. Open to
+  // every signed-in user on purpose -- the policy, not the API layer,
+  // decides who may do what.
+  claimCr: a
+    .mutation()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  addClass: a
     .mutation()
     .arguments({
-      requestId: a.id().required(),
       day: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
@@ -177,17 +165,19 @@ const schema = a.schema({
       purpose: a.string().required(),
     })
     .returns(a.json())
-    .handler(a.handler.function(confirmSlot))
+    .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
-
-  // Cancel a regular class (every section of it, e.g. "Sec B2, C"). Same
-  // Lambda and policy file as confirmSlot; Cedar allows it only for the
-  // faculty member linked to that class's faculty name, or an admin.
   cancelClass: a
     .mutation()
     .arguments({ slotIds: a.id().array().required() })
     .returns(a.json())
-    .handler(a.handler.function(confirmSlot))
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  undoChange: a
+    .mutation()
+    .arguments({ changeId: a.id().required() })
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
 
   // Admin upload: parses a timetable file already uploaded to S3 and

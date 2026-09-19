@@ -2,34 +2,33 @@ import { useState } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
 import NewRequest from './NewRequest'
 import StudentDashboard from './StudentDashboard'
-import TeacherDashboard from './TeacherDashboard'
 import AdminDashboard from './AdminDashboard'
 import AdminTimetableEditor from './AdminTimetableEditor'
 import AdminUpload from './AdminUpload'
 import AdminStudents from './AdminStudents'
+import AdminClassReps from './AdminClassReps'
+import { useClassReps } from './lib/classReps'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
-type FacultyTab = 'teaching' | 'new-request'
-type AdminTab = 'data' | 'upload' | 'students' | 'edit'
+type StudentTab = 'timetable' | 'find'
+type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps'
 
 function AppShell({
   profile,
+  isCr = false,
   onSignOut,
   navItems,
   children,
 }: {
   profile: Profile
+  isCr?: boolean
   onSignOut: () => void
   navItems: { key: string; label: string; active: boolean; onClick: () => void }[]
   children: React.ReactNode
 }) {
-  const rolePillClass =
-    profile.role === 'ADMIN'
-      ? 'role-pill admin'
-      : profile.role === 'FACULTY'
-        ? 'role-pill faculty'
-        : 'role-pill student'
+  const rolePillClass = profile.role === 'ADMIN' ? 'role-pill admin' : 'role-pill student'
+  const roleLabel = profile.role === 'ADMIN' ? 'ADMIN' : isCr ? 'CR' : 'STUDENT'
 
   return (
     <div className="app-shell">
@@ -54,7 +53,7 @@ function AppShell({
           <div>
             <strong>{profile.email}</strong>
             <small>
-              <span className={rolePillClass}>{profile.role}</span>
+              <span className={rolePillClass}>{roleLabel}</span>
             </small>
           </div>
         </div>
@@ -80,10 +79,10 @@ function App() {
 // Mounted only once someone is signed in (and remounted per user), so the
 // profile always loads for the current login.
 function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) {
-  const [facultyTab, setFacultyTab] = useState<FacultyTab>('teaching')
+  const [studentTab, setStudentTab] = useState<StudentTab>('timetable')
   const [adminTab, setAdminTab] = useState<AdminTab>('data')
-  const { profile, loading, error, linkSection, linkFacultyName } = useMyProfile(userId)
-  const user = { userId }
+  const { profile, loading, error, linkSection } = useMyProfile(userId)
+  const { reps, reload: reloadReps } = useClassReps()
 
   if (loading || !profile) {
     return (
@@ -101,18 +100,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           )}
         </main>
       </div>
-    )
-  }
-
-  if (profile.role === 'STUDENT') {
-    return (
-      <AppShell
-        profile={profile}
-        onSignOut={() => signOut?.()}
-        navItems={[{ key: 'timetable', label: 'My Timetable', active: true, onClick: () => {} }]}
-      >
-        <StudentDashboard profile={profile} linkSection={linkSection} />
-      </AppShell>
     )
   }
 
@@ -146,40 +133,56 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
             active: adminTab === 'edit',
             onClick: () => setAdminTab('edit'),
           },
+          {
+            key: 'reps',
+            label: 'Class Reps',
+            active: adminTab === 'reps',
+            onClick: () => setAdminTab('reps'),
+          },
         ]}
       >
         {adminTab === 'data' && <AdminDashboard onOpenStudents={() => setAdminTab('students')} />}
         {adminTab === 'upload' && <AdminUpload onDone={() => setAdminTab('edit')} />}
         {adminTab === 'students' && <AdminStudents />}
         {adminTab === 'edit' && <AdminTimetableEditor />}
+        {adminTab === 'reps' && <AdminClassReps />}
       </AppShell>
     )
   }
 
-  // FACULTY
+  // Everyone else is a student (any old FACULTY rows included); the CR is
+  // a student who has claimed their section.
+  const isCr = Boolean(reps?.some((r) => r.sub === userId))
   return (
     <AppShell
       profile={profile}
+      isCr={isCr}
       onSignOut={() => signOut?.()}
       navItems={[
         {
-          key: 'teaching',
-          label: 'My Teaching Timetable',
-          active: facultyTab === 'teaching',
-          onClick: () => setFacultyTab('teaching'),
+          key: 'timetable',
+          label: 'My Timetable',
+          active: studentTab === 'timetable',
+          onClick: () => setStudentTab('timetable'),
         },
         {
-          key: 'new-request',
-          label: 'Schedule a Session',
-          active: facultyTab === 'new-request',
-          onClick: () => setFacultyTab('new-request'),
+          key: 'find',
+          label: 'Find a Slot',
+          active: studentTab === 'find',
+          onClick: () => setStudentTab('find'),
         },
       ]}
     >
-      {facultyTab === 'teaching' && (
-        <TeacherDashboard profile={profile} linkFacultyName={linkFacultyName} />
+      {studentTab === 'timetable' && (
+        <StudentDashboard
+          profile={profile}
+          linkSection={linkSection}
+          userId={userId}
+          reps={reps}
+          reloadReps={reloadReps}
+        />
       )}
-      {facultyTab === 'new-request' && <NewRequest requesterId={user?.userId ?? ''} />}
+      {studentTab === 'find' && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
     </AppShell>
   )
 }

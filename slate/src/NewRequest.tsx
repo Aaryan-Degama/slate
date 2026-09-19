@@ -4,26 +4,12 @@ import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import { buildGrid, type BusyEntry, type Cell } from './lib/grid'
 import { listAll } from './lib/listAll'
+import { addClass, sectionKey } from './lib/classReps'
 
 const client = generateClient<Schema>()
 
 // Amplify type-inference workaround (see NOTES.md §15): generated
-// .create()/.list() types collapse to a bogus shape, so typed by hand.
-// sections/constraints are AWSJSON, hence stringified.
-type SlotRequestInput = { requesterId: string; status: 'PROPOSED' | 'CONFIRMED'; sections: string; constraints: string }
-const createSlotRequest = client.models.SlotRequest.create as unknown as (
-  input: SlotRequestInput,
-) => Promise<{ data: { id: string } | null; errors?: { message: string }[] }>
-const confirmSlot = (client.mutations as unknown as {
-  confirmSlot: (a: {
-    requestId: string
-    day: string
-    startTime: string
-    endTime: string
-    room?: string | null
-    purpose: string
-  }) => Promise<{ errors?: { message: string }[] }>
-}).confirmSlot
+// query types collapse to a bogus shape, so typed by hand.
 const findSlots = (client.queries as unknown as {
   findSlots: (a: {
     groups: string[]
@@ -49,7 +35,12 @@ const blocks = (rowSection: string, g: string) =>
   rowSection === g || rowSection === g[0] || (g.length === 1 && rowSection[0] === g && rowSection.length === 2)
 const overlaps = (aS: string, aE: string, bS: string, bE: string) => aS < bE && bS < aE
 
-export default function NewRequest({ requesterId }: { requesterId: string }) {
+type MySection = { program: string; branch: string; semester: number; section: string }
+
+/** Find a slot free for every chosen section. Anyone can look; only a CR
+ * can add the result, and only to their own section's timetable (other
+ * sections' CRs add it to theirs). */
+export default function NewRequest({ mySection, isCr }: { mySection: MySection | null; isCr: boolean }) {
   const [slots, setSlots] = useState<SlotRow[] | null>(null)
   const [picked, setPicked] = useState<string[]>([])
   const [purpose, setPurpose] = useState('')
@@ -59,7 +50,6 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
   const [minDurationMins, setMinDurationMins] = useState(60)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'results' | 'confirmed'>('idle')
   const [error, setError] = useState('')
-  const [requestId, setRequestId] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
   const [confirming, setConfirming] = useState<Proposed | null>(null)
   const [confirmed, setConfirmed] = useState<Proposed | null>(null)
@@ -108,16 +98,6 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
     setStatus('submitting')
     setError('')
     try {
-      const created = await createSlotRequest({
-        requesterId,
-        status: 'PROPOSED',
-        sections: JSON.stringify(chosen.map(({ program, branch, semester, section }) => ({ program, branch, semester, section }))),
-        constraints: JSON.stringify({ earliestTime, latestTime, allowedDays, minDurationMins }),
-      })
-      if (created.errors?.length) throw new Error(created.errors.map((e) => e.message).join('; '))
-      if (!created.data?.id) throw new Error('Request was not saved.')
-      setRequestId(created.data.id)
-
       const res = await findSlots({ groups: chosen.map((g) => g.key), earliestTime, latestTime, allowedDays, minDurationMins })
       if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
       let payload = res.data
@@ -127,28 +107,32 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
     } catch (err) {
       setStatus('idle')
       const msg = err instanceof Error ? err.message : 'Something went wrong.'
-      setError(/not authorized|unauthorized/i.test(msg) ? 'Only faculty can schedule sessions.' : msg)
+      setError(msg)
     }
   }
 
+  const myKey = mySection ? sectionKey(mySection) : null
+  const includesMine = chosen.some((g) => sectionKey(g) === myKey)
+
+  const others = chosen.filter((g) => sectionKey(g) !== myKey)
+  const canAdd = isCr && includesMine
+  const whyNot = !isCr
+    ? "Only your section's CR can add this to the timetable."
+    : 'Your own section isn’t one of the chosen sections, so there is nothing for you to add.'
+  const shareNote = (slot: Proposed) =>
+    `"${purpose.trim()}" on ${slot.day} ${slot.start}–${slot.end}${slot.room ? ` in ${slot.room}` : ''}. ` +
+    `Free for ${chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')}. ` +
+    `Please add it to your section on Slate.`
+
   const confirm = async (slot: Proposed) => {
-    if (!requestId) return
     setConfirming(slot)
     setError('')
     try {
-      const res = await confirmSlot({
-        requestId,
-        day: slot.day,
-        startTime: slot.start,
-        endTime: slot.end,
-        room: slot.room,
-        purpose: purpose.trim(),
-      })
-      if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
+      await addClass({ day: slot.day, startTime: slot.start, endTime: slot.end, room: slot.room, purpose: purpose.trim() })
       setConfirmed(slot)
       setStatus('confirmed')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not confirm this slot.')
+      setError(err instanceof Error ? err.message : 'Could not add this class.')
     } finally {
       setConfirming(null)
     }
@@ -157,7 +141,6 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
   const reset = () => {
     setStatus('idle')
     setResult(null)
-    setRequestId(null)
     setConfirmed(null)
     setError('')
   }
@@ -165,15 +148,20 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
   if (status === 'confirmed' && confirmed) {
     return (
       <div className="new-request">
-        <h1>Scheduled</h1>
+        <h1>Added to your section</h1>
         <p>
           "{purpose}" is on {confirmed.day} {confirmed.start}–{confirmed.end}
-          {confirmed.room ? ` in ${confirmed.room}` : ''} for{' '}
-          {chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')}. It now shows up highlighted
-          on those students' timetables.
+          {confirmed.room ? ` in ${confirmed.room}` : ''}. It now shows on every timetable in your section, with your
+          name on it.
         </p>
+        {others.length > 0 && (
+          <>
+            <p>The other sections' CRs add it to theirs. Send them this:</p>
+            <pre className="share-note">{shareNote(confirmed)}</pre>
+          </>
+        )}
         <button type="button" onClick={reset}>
-          Schedule another session
+          Find another slot
         </button>
       </div>
     )
@@ -200,9 +188,13 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
                   <span className="meta">{s.room ? `Room ${s.room} is free` : 'No free room found'}</span>
                 </div>
                 <p className="meta">{s.reason}</p>
-                <button type="button" className="primary" disabled={confirming !== null} onClick={() => confirm(s)}>
-                  {confirming === s ? 'Scheduling...' : 'Schedule this'}
-                </button>
+                {canAdd ? (
+                  <button type="button" className="primary" disabled={confirming !== null} onClick={() => confirm(s)}>
+                    {confirming === s ? 'Adding...' : 'Add to my section'}
+                  </button>
+                ) : (
+                  <p className="meta">{whyNot}</p>
+                )}
               </div>
             ))}
           </div>
@@ -225,7 +217,7 @@ export default function NewRequest({ requesterId }: { requesterId: string }) {
 
   return (
     <form className="new-request" onSubmit={submit}>
-      <h1>Schedule a session</h1>
+      <h1>Find a slot</h1>
 
       <label>
         What's this session for?

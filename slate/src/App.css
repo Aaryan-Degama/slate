@@ -415,25 +415,105 @@ table.admin-table th {
   margin-bottom: 8px;
 }
 
-.cancel-panel {
+
+.cr-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin: 0 0 12px;
   padding: 10px 14px;
-  border: 1px solid var(--danger-border);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--danger-bg);
+  background: var(--bg-subtle);
   color: var(--text-h);
 }
 
-.cancel-panel span {
-  flex: 1 1 240px;
+.cr-bar.is-cr {
+  border-color: var(--free);
+  background: var(--free-bg);
 }
 
-.cancel-panel button.danger {
+.cr-bar span,
+.cr-panel span {
+  flex: 1 1 260px;
+}
+
+.cr-panel,
+.cr-panel form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cr-panel {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.cr-panel form {
+  flex: 1 1 100%;
+}
+
+.cr-panel input {
+  flex: 1 1 180px;
+}
+
+button.danger {
   background: var(--danger);
   border-color: var(--danger);
   color: #fff;
+}
+
+.change-history {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.change-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.change-history li.undone > span:not(.meta) {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.change-history .kind {
+  padding: 0 6px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.change-history .kind.added {
+  background: var(--free);
+}
+
+.change-history .kind.cancelled {
+  background: var(--danger);
+}
+
+.share-note {
+  white-space: pre-wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  font: inherit;
+  user-select: all;
 }

@@ -5,7 +5,7 @@ import { storage } from './storage/resource';
 import { parseTimetable } from './functions/parse-timetable/resource';
 import { importData } from './functions/import-data/resource';
 import { findSlots } from './functions/find-slots/resource';
-import { confirmSlot } from './functions/confirm-slot/resource';
+import { sectionChanges } from './functions/section-changes/resource';
 
 const backend = defineBackend({
   auth,
@@ -14,7 +14,7 @@ const backend = defineBackend({
   parseTimetable,
   importData,
   findSlots,
-  confirmSlot,
+  sectionChanges,
 });
 
 // import-data writes the validated rows straight to DynamoDB.
@@ -39,14 +39,17 @@ for (const [model, env] of [
   backend.findSlots.addEnvironment(env, tables[model].tableName);
 }
 
-// confirm-slot reads the request (or class, and the caller's User row)
-// and writes the confirmation or cancellation.
-const confirmFn = backend.confirmSlot.resources.lambda;
-tables.TimetableSlot.grantReadData(confirmFn);
-tables.User.grantReadData(confirmFn);
-backend.confirmSlot.addEnvironment('TIMETABLE_SLOT_TABLE', tables.TimetableSlot.tableName);
-backend.confirmSlot.addEnvironment('USER_TABLE', tables.User.tableName);
-tables.SlotRequest.grantReadWriteData(confirmFn);
-tables.ScheduleChange.grantWriteData(confirmFn);
-backend.confirmSlot.addEnvironment('SLOT_REQUEST_TABLE', tables.SlotRequest.tableName);
-backend.confirmSlot.addEnvironment('SCHEDULE_CHANGE_TABLE', tables.ScheduleChange.tableName);
+// section-changes resolves the caller's section, checks the CR table and
+// writes changes / CR claims.
+const changesFn = backend.sectionChanges.resources.lambda;
+for (const [model, env, write] of [
+  ['ScheduleChange', 'SCHEDULE_CHANGE_TABLE', true],
+  ['ClassRep', 'CLASS_REP_TABLE', true],
+  ['TimetableSlot', 'TIMETABLE_SLOT_TABLE', false],
+  ['StudentSection', 'STUDENT_SECTION_TABLE', false],
+  ['RollRange', 'ROLL_RANGE_TABLE', false],
+] as const) {
+  if (write) tables[model].grantReadWriteData(changesFn);
+  else tables[model].grantReadData(changesFn);
+  backend.sectionChanges.addEnvironment(env, tables[model].tableName);
+}

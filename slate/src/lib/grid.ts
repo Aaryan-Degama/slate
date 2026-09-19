@@ -36,8 +36,8 @@ export type BusyEntry = {
    * ingestion for easy per-section querying, then re-merged here for
    * anyone looking at multiple sections at once). */
   mergedIds?: string[];
-  /** A CANCELLED ScheduleChange matches this class. */
-  cancelled?: boolean;
+  /** The CANCELLED ScheduleChange that matches this class, if any. */
+  cancelled?: ChangeEntry;
 };
 
 export type ChangeEntry = {
@@ -47,7 +47,15 @@ export type ChangeEntry = {
   courseId: string;
   changeType: 'SCHEDULED' | 'CANCELLED';
   section?: string;
+  id?: string;
+  room?: string | null;
+  /** Email of whoever made / undid the change (the section's CR). */
+  changedBy?: string | null;
+  undoneAt?: string | null;
 };
+
+/** "iit2024245@iiita.ac.in" -> "IIT2024245": how a change's author is shown. */
+export const personLabel = (email?: string | null) => (email ? email.split('@')[0].toUpperCase() : 'unknown');
 
 export type Cell = {
   day: Day;
@@ -97,10 +105,15 @@ const cancels = (c: ChangeEntry, b: BusyEntry) =>
 export function buildGrid(input: BusyEntry[], allChanges: ChangeEntry[] = []): Cell[][] {
   // A cancellation marks the class itself (struck through) rather than
   // taking over the cell the way a newly scheduled session does.
-  const cancellations = allChanges.filter((c) => c.changeType === 'CANCELLED');
-  const changes = allChanges.filter((c) => c.changeType !== 'CANCELLED');
+  // Undone changes stay in the history but no longer show on the grid.
+  const live = allChanges.filter((c) => !c.undoneAt);
+  const cancellations = live.filter((c) => c.changeType === 'CANCELLED');
+  const changes = live.filter((c) => c.changeType !== 'CANCELLED');
   const busy = cancellations.length
-    ? input.map((b) => (cancellations.some((c) => cancels(c, b)) ? { ...b, cancelled: true } : b))
+    ? input.map((b) => {
+        const c = cancellations.find((c) => cancels(c, b));
+        return c ? { ...b, cancelled: c } : b;
+      })
     : input;
   return DAYS.map((day) =>
     HOURS.map(({ start, end }) => ({
