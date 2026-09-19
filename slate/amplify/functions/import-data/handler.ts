@@ -7,7 +7,7 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { loadWorkbook } from '../parse-timetable/load'
-import { processSheet } from '../parse-timetable/reader'
+import { processSheet, WHOLE_BATCH } from '../parse-timetable/reader'
 import { readTable } from '../parse-timetable/table'
 import { buildStudentRecords } from './students'
 
@@ -25,6 +25,7 @@ type Args = {
   admissionYear?: string | null
   sectionOverride?: string | null
   subSectionOverride?: string | null
+  defaultSection?: string | null
   removeMissing?: boolean | null
   dryRun: boolean
 }
@@ -104,6 +105,9 @@ export const handler = async (event: Event) => {
 
   if (a.kind === 'timetable') {
     const parsed = processSheet(ws)
+    const whole = a.defaultSection?.trim().toUpperCase()
+    if (parsed.needsSection && !(whole && /^[A-Z]$/.test(whole)))
+      throw new Error("This sheet's classes don't name a section. Say which section the batch is (e.g. D).")
     const rows = parsed.rows.map((r) => ({
       ...batch,
       day: r.day,
@@ -111,8 +115,8 @@ export const handler = async (event: Event) => {
       endTime: r.endTime,
       courseId: r.courseId,
       sessionType: r.sessionType,
-      section: r.section,
-      room: r.room,
+      section: r.section === WHOLE_BATCH ? whole! : r.section,
+      room: r.room || undefined,
       faculty: r.faculty,
     }))
     const key = (r: Record<string, unknown>) => `${r.day}|${r.courseId}|${r.sessionType ?? ''}|${r.section}|${r.startTime}`

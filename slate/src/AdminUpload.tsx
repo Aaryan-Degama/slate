@@ -31,6 +31,7 @@ type SheetResult =
       kind: 'timetable'
       title: string
       batch: { program: string | null; branch: string | null; semester: number | null }
+      needsSection: boolean
       rows: ParsedRow[]
       skipped: { coord: string; day: string; text: string; reason: string }[]
       issues: Issue[]
@@ -55,6 +56,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   const [selected, setSelected] = useState<OkSheet | null>(null)
   const [selectedTable, setSelectedTable] = useState<TableSheet | null>(null)
   const [batch, setBatch] = useState<Batch | null>(null)
+  const [wholeSection, setWholeSection] = useState('')
   const [diff, setDiff] = useState<ImportResult | null>(null)
   const [fileKey, setFileKey] = useState('')
   const [removeMissing, setRemoveMissing] = useState(false)
@@ -91,6 +93,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
     setSelected(s)
     setDiff(null)
     setRemoveMissing(false)
+    setWholeSection('')
     const b = s.batch
     setBatch(b.program && b.branch && b.semester ? { program: b.program, branch: b.branch, semester: b.semester } : null)
   }
@@ -100,7 +103,15 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
     setError('')
     if (!dryRun) setStatus('applying')
     try {
-      const res = await runImport({ key: fileKey, sheet: selected.sheet, kind: 'timetable', ...batch, removeMissing, dryRun })
+      const res = await runImport({
+        key: fileKey,
+        sheet: selected.sheet,
+        kind: 'timetable',
+        ...batch,
+        defaultSection: selected.needsSection ? wholeSection : null,
+        removeMissing,
+        dryRun,
+      })
       setDiff(res)
       if (!dryRun) {
         setAppliedCount(res.added + res.changedCount + (removeMissing ? res.removed : 0))
@@ -217,9 +228,30 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
                 onChange={(e) => setBatch({ ...(batch ?? { program: '', branch: '' }), semester: Number(e.target.value) })}
               />
             </div>
+            {selected.needsSection && (
+              <label style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                This sheet's classes don't name a section (one section for the whole batch). Which section is it?
+                <input
+                  placeholder="e.g. D"
+                  value={wholeSection}
+                  maxLength={1}
+                  onChange={(e) => {
+                    setWholeSection(e.target.value.trim().toUpperCase())
+                    setDiff(null)
+                  }}
+                  style={{ width: 80 }}
+                />
+              </label>
+            )}
           </div>
 
-          <TimetableGrid grid={buildGrid(selected.rows.map((r) => ({ ...r }) as BusyEntry))} />
+          <TimetableGrid
+            grid={buildGrid(
+              selected.rows.map(
+                (r) => ({ ...r, section: r.section === '*' ? wholeSection || 'whole batch' : r.section }) as BusyEntry,
+              ),
+            )}
+          />
 
           {flagged.length > 0 && (
             <div className="card gap-warning" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -255,7 +287,9 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
           {!diff && (
             <button
               className="primary"
-              disabled={!batch?.program || !batch.branch || !batch.semester}
+              disabled={
+                !batch?.program || !batch.branch || !batch.semester || (selected.needsSection && !/^[A-Z]$/.test(wholeSection))
+              }
               onClick={() => runTimetable(true)}
             >
               Compare with current timetable

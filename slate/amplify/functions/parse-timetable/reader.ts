@@ -1,16 +1,42 @@
-// TypeScript port of scripts/timetable_reader.py (read -> map -> validate).
-// Keep the two in step; the Python one is the reference for offline runs.
+// Timetable reader (read -> map -> validate). Started as a port of
+// scripts/timetable_reader.py; this version is now the reference (the
+// Python script doesn't handle sheets whose classes name no section).
 import type { Worksheet } from 'exceljs'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const TIME_RANGE_RE = /^\s*(\d{1,2})[:.](\d{2})\s*-\s*(\d{1,2})[:.](\d{2})\s*$/
 const ENTRY_RE = /^\s*([A-Za-z][A-Za-z.&]*)\s*\(\s*([LTP])\s*\)\s*-\s*(?:Sec\s*)?(.+?)\s*\(([^)]+)\)\s*$/
 const SECTION_RE = /^[A-Z]\d?$/
+// "DSP (L)", "ESD (P) 5118", "SSD (L) CC-3, 5254", "CE (L) (CC3- 5207)": no section named.
+const PLAIN_RE = /^\s*([A-Za-z][A-Za-z0-9.&-]*)\s*\(\s*([LTP])\s*\)\s*(.*)$/
+const LTPS_RE = /^\s*\d+(?:\.\d+)?\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*$/
+const CODE_RE = /^[A-Za-z][A-Za-z0-9-]{0,11}$/
+const CATEGORY_RE = /^(PCC|PEC|OEC|BSC|ESC|HSMC|MDM|AEC|VAC|SEC|PC|PE|OE)\b/i
+const CORE_CATEGORY_RE = /^(PCC|BSC|ESC|PC)\b/i
+/** Placeholder section for classes on a sheet that names none (single-section batch). */
+export const WHOLE_BATCH = '*'
+
+/** "CC-3, 5254" / "(CC3- 5207)" / "CC-3 5154" -> "CC3-5254"; a bare "5118" stays as is. */
+function normRoom(raw: string): string | null | undefined {
+  const t = raw.replace(/[()]/g, ' ').trim()
+  if (!t) return null
+  const cc = /^CC\s*-?\s*(\d)\s*[-,]?\s*(\d{3,4})$/i.exec(t)
+  if (cc) return `CC${cc[1]}-${cc[2]}`
+  if (/^\d{3,4}$/.test(t)) return t
+  if (/^[A-Z]{1,3}\s*-?\s*\d{3,4}$/i.test(t)) return t.replace(/\s+/g, '')
+  return undefined
+}
 
 type Range = { top: number; left: number; bottom: number; right: number }
 type Hour = { start: string; end: string; cols: number[] }
 type SheetCell = { coord: string; day: string; hours: number[]; fullHeight: boolean; text: string }
-type LegendEntry = { name: string; ltps: number[] | null; faculty: Record<string, string> }
+type LegendEntry = {
+  name: string
+  ltps: number[] | null
+  faculty: Record<string, string>
+  /** Listed on its own with a core category (PCC/BSC/...), i.e. taken by the whole section. */
+  core: boolean
+}
 
 export type Row = {
   program: string | null
@@ -34,6 +60,8 @@ export type SheetResult = {
   sheet: string
   title: string
   batch: { program: string | null; branch: string | null; semester: number | null }
+  /** Classes name no section (single-section batch); the admin says which. */
+  needsSection: boolean
   rows: Row[]
   skipped: Skipped[]
   issues: Issue[]
@@ -138,45 +166,66 @@ function readSheet(ws: Worksheet) {
   }
 
   const lastRow = blocks.length ? blocks[blocks.length - 1].rows.at(-1)! + 1 : headerRow + 1
-  return { title, hours, cells, legend: readLegend(text, lastRow, maxRow, maxCol) }
+  const roomNote = /Room\s*No\.?\s*for\s*Lectures\s*:\s*([^\n|]+)/i.exec(title)?.[1] ?? ''
+  const lectureRooms = roomNote.split(/,\s*(?=CC)|\band\b/i).map((r) => normRoom(r)).filter(Boolean)
+  return {
+    title,
+    hours,
+    cells,
+    legend: readLegend(text, lastRow, maxRow, maxCol),
+    lectureRoom: lectureRooms.length === 1 ? lectureRooms[0]! : null,
+  }
 }
 
+// Two layouts: a block under a "Course Code" header (IT sheets, ECE
+// elective list), and header-less rows of code, name, category, credits,
+// L-T-P-S, faculty (ECE core courses). Any row with an L-T-P-S cell counts.
 function readLegend(text: (r: number, c: number) => string, fromRow: number, maxRow: number, maxCol: number) {
-  let r = fromRow
-  let headers: Map<string, number> | null = null
-  for (; r <= maxRow; r++) {
-    const h = new Map<string, number>()
-    for (let c = 1; c <= maxCol; c++) h.set(text(r, c).trim().toLowerCase(), c)
-    if (h.has('course code')) {
-      headers = h
-      break
-    }
-  }
   const legend: Record<string, LegendEntry> = {}
-  if (!headers) return legend
-  const col = (...names: string[]) => {
+  let headers: Map<string, number> | null = null
+  const hcol = (...names: string[]) => {
     for (const [k, c] of headers!) if (names.some((n) => k.includes(n))) return c
     return null
   }
-  const codeC = col('course code')!
-  const ltpsC = col('l-t-p')
-  const nameC = col('course name')
-  const facC = col('facult')
-  for (let rr = r + 1; rr <= maxRow; rr++) {
-    const code = text(rr, codeC).trim()
-    if (!code) {
-      if (Object.keys(legend).length) break
+  for (let r = fromRow; r <= maxRow; r++) {
+    const cells = Array.from({ length: maxCol }, (_, i) => text(r, i + 1).trim())
+    if (cells.some((c) => c.toLowerCase() === 'course code')) {
+      headers = new Map(cells.map((c, i) => [c.toLowerCase(), i + 1]))
       continue
     }
-    const nums = (ltpsC ? text(rr, ltpsC) : '')
-      .trim()
-      .split(/\s*[-–—]\s*/)
-      .filter((x) => /^\d+$/.test(x))
-      .map(Number)
-    legend[code] = {
-      name: nameC ? text(rr, nameC).trim() : '',
-      ltps: nums.length === 4 ? nums : null,
-      faculty: parseFaculty(facC ? text(rr, facC) : ''),
+    const ltpsIdx = cells.findIndex((c) => LTPS_RE.test(c))
+    if (ltpsIdx < 0) continue
+
+    let codeCell = ''
+    let name = ''
+    let faculty = ''
+    let category = ''
+    if (headers) {
+      const codeC = hcol('course code')
+      const nameC = hcol('course name')
+      const facC = hcol('facult')
+      codeCell = codeC ? cells[codeC - 1] : ''
+      name = nameC ? cells[nameC - 1] : ''
+      faculty = facC ? cells[facC - 1] : ''
+    } else {
+      const codeIdx = cells.findIndex(
+        (c, i) => i < ltpsIdx && c && c.split(/\n|\|/).every((x) => CODE_RE.test(x.trim())),
+      )
+      if (codeIdx < 0) continue
+      codeCell = cells[codeIdx]
+      name = cells.find((c, i) => i > codeIdx && /[a-z]/.test(c)) ?? ''
+      category = cells.find((c) => CATEGORY_RE.test(c)) ?? ''
+      faculty = cells.find((c, i) => i > ltpsIdx && /[A-Za-z]/.test(c)) ?? ''
+    }
+    const codes = codeCell.split(/\n|\|/).map((c) => c.trim()).filter(Boolean)
+    const nums = cells[ltpsIdx].split(/\s*[-–—]\s*/).map(Number)
+    for (const code of codes) {
+      legend[code] = {
+        name,
+        ltps: nums.length === 4 && nums.every((n) => !Number.isNaN(n)) ? nums : null,
+        faculty: parseFaculty(codes.length > 1 ? '' : faculty),
+        core: !headers && codes.length === 1 && CORE_CATEGORY_RE.test(category),
+      }
     }
   }
   return legend
@@ -205,15 +254,41 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
     for (const raw of cell.text.split('\n')) {
       const line = raw.trim()
       if (!line) continue
+      const skip = (reason: string) => skipped.push({ coord: cell.coord, day: cell.day, text: line, reason })
+      let code: string, kind: string, room: string | null, sections: string[]
       const m = ENTRY_RE.exec(line)
-      if (!m) {
-        skipped.push({ coord: cell.coord, day: cell.day, text: line, reason: 'not in "CODE (L/T/P) - Sec X (ROOM)" form' })
-        continue
-      }
-      const [, code, kind, secs, room] = m
-      const sections = secs.trim().split(/[,\s]+/).filter(Boolean)
-      if (!sections.every((s) => SECTION_RE.test(s))) {
-        skipped.push({ coord: cell.coord, day: cell.day, text: line, reason: `no section, only a cohort label ("${secs.trim()}")` })
+      const p = m ? null : PLAIN_RE.exec(line)
+      if (m) {
+        let secs: string
+        ;[, code, kind, secs, room] = m as unknown as [string, string, string, string, string]
+        sections = secs.trim().split(/[,\s]+/).filter(Boolean)
+        if (!sections.every((s) => SECTION_RE.test(s))) {
+          skip(`no section, only a cohort label ("${secs.trim()}")`)
+          continue
+        }
+        room = room!.replace(/\s+/g, '')
+      } else if (p) {
+        // No section named: only a core course the whole section takes
+        // (per the course list) counts; electives stay out.
+        ;[, code, kind] = p as unknown as [string, string, string]
+        const info = sheet.legend[code.trim()]
+        if (!info?.core) {
+          skip(
+            info
+              ? 'no section, and the course list marks it as an elective or shared course'
+              : 'no section, and not a core course in the course list',
+          )
+          continue
+        }
+        const r = normRoom(p[3])
+        if (r === undefined) {
+          skip(`couldn't read the room "${p[3].trim()}"`)
+          continue
+        }
+        room = r ?? (kind.toUpperCase() === 'P' ? null : sheet.lectureRoom)
+        sections = [WHOLE_BATCH]
+      } else {
+        skip('not in a "CODE (L/T/P) ..." form')
         continue
       }
       const first = cell.hours[0]
@@ -227,7 +302,7 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
           courseId: code.trim(),
           sessionType: kind.toUpperCase(),
           section,
-          room: room.replace(/\s+/g, ''),
+          room: room ?? '',
           source: cell.coord,
           duration: ambiguous ? 'ambiguous' : long ? 'merge' : 'single',
         })
@@ -341,6 +416,7 @@ export function processSheet(ws: Worksheet): SheetResult {
     sheet: ws.name,
     title: sheet.title,
     batch,
+    needsSection: rows.some((r) => r.section === WHOLE_BATCH),
     rows: rows.map(({ longEndTime: _, ...r }) => {
       const fac = sheet.legend[r.courseId]?.faculty ?? {}
       return { ...r, ...batch, faculty: fac[r.section] ?? fac[r.section[0]] ?? fac['*'] ?? null }

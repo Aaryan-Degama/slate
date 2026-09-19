@@ -1,6 +1,10 @@
 """
 Timetable reader + validator (ingestion pipeline steps 1-3).
 
+Offline/original version. The deployed reader is
+amplify/functions/parse-timetable/reader.ts, which also handles sheets
+whose classes name no section (single-section batches, e.g. ECE).
+
   1. read_sheet():   spreadsheet -> neutral cells with real geometry. Hour
                      columns come from the header row's own merges, day
                      blocks from column A's merges -- no hardcoded column

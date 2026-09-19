@@ -177,6 +177,8 @@ const schema = a.schema({
       // The review screen's "same for every row" fields.
       sectionOverride: a.string(),
       subSectionOverride: a.string(),
+      // Timetables whose classes name no section (single-section batch).
+      defaultSection: a.string(),
       removeMissing: a.boolean(),
       dryRun: a.boolean().required(),
     })
