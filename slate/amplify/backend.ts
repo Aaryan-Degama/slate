@@ -53,6 +53,9 @@ for (const [model, env, write] of [
   else tables[model].grantReadData(changesFn);
   backend.sectionChanges.addEnvironment(env, tables[model].tableName);
 }
+// ...and reads the caller's verified email from Cognito (access tokens don't carry it).
+backend.sectionChanges.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
+backend.auth.resources.userPool.grant(changesFn, 'cognito-idp:AdminGetUser');
 
 // Changes only matter for this week and next (CLAUDE.md §2): each row
 // carries expiresAt (epoch seconds, the Monday after its week) and

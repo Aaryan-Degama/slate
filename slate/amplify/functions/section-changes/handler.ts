@@ -12,6 +12,7 @@
 // ScheduleChange row per section, sharing a groupId. Rows record who made
 // them; undo marks them (undoneBy/undoneAt) instead of deleting them.
 import { randomUUID } from 'node:crypto'
+import { AdminGetUserCommand, CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { BatchWriteCommand, DynamoDBDocumentClient, PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import { initSync, isAuthorized, type CedarValueJson } from '@cedar-policy/cedar-wasm/web'
@@ -19,7 +20,7 @@ import { CEDAR_WASM_BASE64, POLICY } from './embedded.gen'
 
 initSync({ module: Buffer.from(CEDAR_WASM_BASE64, 'base64') })
 
-type Identity = { sub: string; groups?: string[] | null; claims?: { email?: string } }
+type Identity = { sub: string; username?: string; groups?: string[] | null; claims?: { email?: string } }
 // Amplify's function resolver puts fieldName at the top level; a plain
 // AppSync Lambda resolver puts it under info. Accept both.
 type Event = { fieldName?: string; info?: { fieldName: string }; arguments: Record<string, unknown>; identity: Identity }
@@ -90,6 +91,23 @@ async function sectionOf(email: string): Promise<Section | null> {
   return r && { program: r.program, branch: r.branch, semester: r.semester, section: r.section }
 }
 
+// The app authenticates with Cognito *access* tokens, which carry no email
+// claim, so look the verified email up in the user pool by the caller's
+// (token-verified) username. Never from the User table: users can edit their
+// own row there.
+const cognito = new CognitoIdentityProviderClient({})
+const emails = new Map<string, string>()
+async function emailOf(identity: Identity): Promise<string> {
+  if (identity.claims?.email) return identity.claims.email
+  const username = identity.username ?? identity.sub
+  if (!emails.has(username)) {
+    const user = await cognito.send(new AdminGetUserCommand({ UserPoolId: process.env.USER_POOL_ID!, Username: username }))
+    const attr = (n: string) => user.UserAttributes?.find((x) => x.Name === n)?.Value
+    emails.set(username, attr('email_verified') === 'true' ? (attr('email') ?? '') : '')
+  }
+  return emails.get(username)!
+}
+
 const roleOf = (groups: string[]) => (groups.includes('ADMIN') ? 'ADMIN' : 'STUDENT')
 
 // ---------------------------------------------------------------- dates
@@ -118,7 +136,7 @@ const expiresAt = (date: string) => Math.floor(new Date(`${addDays(mondayOf(date
 type Ctx = { identity: Identity; email: string; mine: Section | null; reps: Row[]; principal: Entity }
 
 async function context(identity: Identity): Promise<Ctx> {
-  const email = identity.claims?.email ?? ''
+  const email = await emailOf(identity)
   const [mine, reps] = await Promise.all([sectionOf(email), scanAll(CR)])
   const principal: Entity = {
     uid: user(identity.sub),
@@ -270,7 +288,7 @@ function checkTimes(a: Row) {
 export const handler = async (event: Event) => {
   const field = event.fieldName ?? event.info?.fieldName
   const a = event.arguments
-  const email = event.identity.claims?.email ?? ''
+  const email = await emailOf(event.identity)
 
   if (field === 'mySection') return JSON.stringify(await resolve(email))
 
