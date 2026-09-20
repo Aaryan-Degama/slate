@@ -9,6 +9,7 @@ type StudentRow = {
   admissionYear: string
   rollNumber: number
   rollPrefix?: string | null
+  name?: string | null
   program: string
   branch: string
   semester: number
@@ -279,6 +280,7 @@ export default function AdminStudents() {
 
 type TableRow = {
   rollId: string
+  name: string
   admissionYear: string
   rollNumber: number
   section: string
@@ -304,12 +306,14 @@ function StudentTable({
   const [q, setQ] = useState('')
   const [section, setSection] = useState('')
   const [source, setSource] = useState<'' | 'list' | 'range'>('')
-  // Alphabetical by roll id, so the prefixes group together (IIB..., IIT...).
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rollId', dir: 1 })
+  // Alphabetical by name; students with no name yet (roll ranges, older
+  // uploads) fall to the end rather than to the top.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
 
   const rows = useMemo(() => {
     const out: TableRow[] = students.map((s) => ({
       rollId: `${s.rollPrefix || `I${s.branch.toUpperCase()}`}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`,
+      name: s.name ?? '',
       admissionYear: s.admissionYear,
       rollNumber: s.rollNumber,
       section: s.section[0],
@@ -323,6 +327,7 @@ function StudentTable({
         if (listed.has(`${r.admissionYear}|${n}`)) continue
         const sub = ranges.find((x) => isSub(x.section) && x.section[0] === r.section && x.admissionYear === r.admissionYear && n >= x.minRoll && n <= x.maxRoll)
         out.push({
+          name: '',
           rollId: `I${batch.branch.toUpperCase()}${r.admissionYear}${String(n).padStart(3, '0')}`,
           admissionYear: r.admissionYear,
           rollNumber: n,
@@ -338,7 +343,7 @@ function StudentTable({
     const needle = q.trim().toLowerCase()
     const filtered = rows.filter(
       (r) =>
-        (!needle || r.rollId.toLowerCase().includes(needle) || String(r.rollNumber).includes(needle)) &&
+        (!needle || r.rollId.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle) || String(r.rollNumber).includes(needle)) &&
         (!section || r.section === section) &&
         (!source || r.source === source),
     )
@@ -346,6 +351,7 @@ function StudentTable({
     return [...filtered].sort((a, b) => {
       const x = a[key]
       const y = b[key]
+      if (key === 'name' && !x !== !y) return x ? -1 : 1
       return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * dir
     })
   }, [rows, q, section, source, sort])
@@ -360,7 +366,10 @@ function StudentTable({
     </th>
   )
   const csv = () => {
-    const text = ['roll,year,number,section,subSection,source', ...shown.map((r) => [r.rollId, r.admissionYear, r.rollNumber, r.section, r.subSection, r.source].join(','))].join('\n')
+    const text = [
+      'name,roll,year,number,section,subSection,source',
+      ...shown.map((r) => [`"${r.name.replace(/"/g, '""')}"`, r.rollId, r.admissionYear, r.rollNumber, r.section, r.subSection, r.source].join(',')),
+    ].join('\n')
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
@@ -377,7 +386,7 @@ function StudentTable({
         {lastUpdate ? ` · list last updated ${new Date(lastUpdate).toLocaleString()}` : ''}
       </p>
       <div className="filter-bar">
-        <input placeholder="Search roll number" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder="Search name or roll" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={section} onChange={(e) => setSection(e.target.value)}>
           <option value="">All sections</option>
           {sections.map((s) => (
@@ -404,6 +413,7 @@ function StudentTable({
             <thead>
               <tr>
                 <th>#</th>
+                {header('name', 'Name')}
                 {header('rollId', 'Roll')}
                 {header('admissionYear', 'Year')}
                 {header('section', 'Section')}
@@ -413,6 +423,7 @@ function StudentTable({
               {shown.map((r, i) => (
                 <tr key={`${r.admissionYear}-${r.rollNumber}`}>
                   <td className="meta">{i + 1}</td>
+                  <td>{r.name || <span className="meta">—</span>}</td>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.rollId}</td>
                   <td>{r.admissionYear}</td>
                   <td>{r.subSection || r.section}</td>

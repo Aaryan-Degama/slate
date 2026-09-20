@@ -20,6 +20,7 @@ type Args = {
   semester: number
   rollCol?: number | null
   emailCol?: number | null
+  nameCol?: number | null
   sectionCol?: number | null
   subSectionCol?: number | null
   admissionYear?: string | null
@@ -187,6 +188,7 @@ export const handler = async (event: Event) => {
     const mapping = {
       roll: a.rollCol ?? null,
       email: a.emailCol ?? null,
+      name: a.nameCol ?? null,
       section: a.sectionCol ?? null,
       subSection: a.subSectionCol ?? null,
     }
@@ -212,7 +214,10 @@ export const handler = async (event: Event) => {
     const changed = valid.flatMap((r) => {
       const cur = byKey.get(idOf(r.prefix, r.year, r.roll))
       if (!cur) return []
-      const differs = cur.section !== r.section || (setsSub && (cur.subSection ?? undefined) !== r.subSection)
+      const differs =
+        cur.section !== r.section ||
+        (setsSub && (cur.subSection ?? undefined) !== r.subSection) ||
+        (mapping.name !== null && (cur.name ?? undefined) !== r.name)
       return differs ? [{ cur, next: r }] : []
     })
     const removed = existing.filter((e) => !seen.has(idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber))))
@@ -226,13 +231,18 @@ export const handler = async (event: Event) => {
             admissionYear: r.year,
             rollNumber: r.roll,
             rollPrefix: r.prefix,
+            name: r.name,
             section: r.section,
             subSection: r.subSection,
           }),
         ),
       )
       for (const c of changed)
-        await update(SS, c.cur.id, { section: c.next.section, ...(setsSub ? { subSection: c.next.subSection ?? null } : {}) })
+        await update(SS, c.cur.id, {
+          section: c.next.section,
+          ...(setsSub ? { subSection: c.next.subSection ?? null } : {}),
+          ...(mapping.name !== null ? { name: c.next.name ?? null } : {}),
+        })
       if (a.removeMissing) await batchWrite(SS, removed.map((e) => del(e.id)))
     }
     const counts: Record<string, number> = {}

@@ -1,13 +1,14 @@
 // Student-list rows -> checked records, using the admin-confirmed column
 // mapping and the batch's real sections from TimetableSlot.
 
-export type Mapping = { roll: number | null; email: number | null; section: number | null; subSection: number | null }
+export type Mapping = { roll: number | null; email: number | null; name: number | null; section: number | null; subSection: number | null }
 export type StudentRecord = {
   line: number
   year?: string
   roll?: number
   /** IIT / IIB / IEC ... -- roll numbers restart per prefix. */
   prefix?: string
+  name?: string
   section?: string
   subSection?: string
   problems: string[]
@@ -43,6 +44,9 @@ export function buildStudentRecords(
     const fromRoll = parseId(cell(row, mapping.roll))
     const id = fromRoll.roll !== undefined ? fromRoll : parseId(cell(row, mapping.email))
     const problems: string[] = []
+    // Sheets mark some names with a trailing "*" (e.g. a hostel/day-scholar
+    // flag); it isn't part of the name.
+    const name = cell(row, mapping.name).replace(/\*+$/, '').trim() || undefined
     const fileSec = cell(row, mapping.section).toUpperCase() || undefined
     let fileSub = cell(row, mapping.subSection).toUpperCase() || undefined
     // A lab-group column that just says 1/2 means <section>1/<section>2.
@@ -60,7 +64,7 @@ export function buildStudentRecords(
       if (!subs.has(sub)) problems.push(`sub-section ${sub} isn't in this batch's timetable`)
       if (section && sub[0] !== section) problems.push(`sub-section ${sub} doesn't belong to section ${section}`)
     }
-    return { line: i + 1, year, roll: id.roll, prefix: id.prefix, section, subSection: sub, problems }
+    return { line: i + 1, year, roll: id.roll, prefix: id.prefix, name, section, subSection: sub, problems }
   })
 
   // Course lists (e.g. attendance registers) also carry students from other

@@ -143,6 +143,9 @@ const schema = a.schema({
       // -- IT Sem 5 holds both IIT and IIB students, and their numbering
       // restarts per prefix, so IIB2024001 and IIT2024001 are two people.
       rollPrefix: a.string(),
+      // As printed in the admin's student list. Admin-only, like the rest
+      // of this model.
+      name: a.string(),
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),
@@ -256,6 +259,7 @@ const schema = a.schema({
       semester: a.integer().required(),
       rollCol: a.integer(),
       emailCol: a.integer(),
+      nameCol: a.integer(),
       sectionCol: a.integer(),
       subSectionCol: a.integer(),
       admissionYear: a.string(),
