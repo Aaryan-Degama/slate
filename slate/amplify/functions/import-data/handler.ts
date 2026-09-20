@@ -195,20 +195,27 @@ export const handler = async (event: Event) => {
       section: a.sectionOverride ?? undefined,
       subSection: a.subSectionOverride ?? undefined,
     })
-    const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [`${r.year}|${r.roll}`, r])).values()]
+    // Roll numbers restart per prefix and a batch can mix them (IT Sem 5
+    // holds IIT and IIB students), so a student is identified by
+    // prefix + year + number. Rows imported before prefixes were kept fall
+    // back to the batch's branch (IIT for an IT batch).
+    const fallback = `I${batch.branch.toUpperCase()}`
+    const idOf = (prefix: string | undefined, year: string | undefined, roll: number | undefined) =>
+      `${(prefix || fallback).toUpperCase()}|${year}|${roll}`
+    const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [idOf(r.prefix, r.year, r.roll), r])).values()]
 
     const existing = (await scanAll(SS)).filter(inBatch)
-    const byKey = new Map(existing.map((e) => [`${e.admissionYear}|${Number(e.rollNumber)}`, e]))
-    const seen = new Set(valid.map((r) => `${r.year}|${r.roll}`))
+    const byKey = new Map(existing.map((e) => [idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber)), e]))
+    const seen = new Set(valid.map((r) => idOf(r.prefix, r.year, r.roll)))
     const setsSub = mapping.subSection !== null
-    const added = valid.filter((r) => !byKey.has(`${r.year}|${r.roll}`))
+    const added = valid.filter((r) => !byKey.has(idOf(r.prefix, r.year, r.roll)))
     const changed = valid.flatMap((r) => {
-      const cur = byKey.get(`${r.year}|${r.roll}`)
+      const cur = byKey.get(idOf(r.prefix, r.year, r.roll))
       if (!cur) return []
       const differs = cur.section !== r.section || (setsSub && (cur.subSection ?? undefined) !== r.subSection)
       return differs ? [{ cur, next: r }] : []
     })
-    const removed = existing.filter((e) => !seen.has(`${e.admissionYear}|${Number(e.rollNumber)}`))
+    const removed = existing.filter((e) => !seen.has(idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber))))
 
     if (!a.dryRun) {
       await batchWrite(
