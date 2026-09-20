@@ -26,8 +26,8 @@
   align-items: center;
   gap: 10px;
   font-family: var(--display);
-  font-weight: 800;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 19px;
   letter-spacing: -0.03em;
   color: #fff;
 }
@@ -257,8 +257,8 @@ legend {
 .stat-tile .value {
   display: block;
   font-family: var(--display);
-  font-size: 26px;
-  font-weight: 800;
+  font-size: 27px;
+  font-weight: 700;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
@@ -306,8 +306,8 @@ legend {
 
 .up-next .what {
   font-family: var(--display);
-  font-size: clamp(19px, 2.2vw, 24px);
-  font-weight: 800;
+  font-size: clamp(20px, 2.2vw, 25px);
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
