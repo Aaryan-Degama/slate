@@ -566,3 +566,28 @@ button.danger {
 .roster .roll.cr {
   border-color: var(--text-h);
 }
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-bar input {
+  min-width: 180px;
+}
+
+/* A long student list stays inside the page, with its header in view. */
+.table-scroll {
+  max-height: 60vh;
+  overflow: auto;
+  border-radius: 10px;
+}
+
+.table-scroll table.admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-subtle);
+}
