@@ -7,7 +7,6 @@ import { cellText } from './reader'
 export type ColumnGuess = {
   roll: number | null
   email: number | null
-  name: number | null
   section: number | null
   subSection: number | null
 }
@@ -23,8 +22,6 @@ export type TableResult = {
 const MAX_ROWS = 5000
 const ROLL_HEADER = /(roll|enrol|registration|reg\.?\s*no|admission\s*no|student\s*id)/i
 const SECTION_HEADER = /(sec|group|batch)/i
-const NAME_HEADER = /name/i
-const NAME_VALUE = /^[A-Za-z][A-Za-z.'’\- ]{2,}\*?$/
 const ROLL_VALUE = /^[A-Za-z]{2,4}\d{7}$|^\d{7}$/
 const EMAIL_VALUE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const SECTION_VALUE = /^[A-Za-z]$/
@@ -74,13 +71,6 @@ export function readTable(ws: Worksheet): TableResult {
   guess.roll = pick(ROLL_HEADER, ROLL_VALUE, [guess.email])
   guess.subSection = pick(SECTION_HEADER, SUBSECTION_VALUE, [guess.email, guess.roll])
   guess.section = pick(SECTION_HEADER, SECTION_VALUE, [guess.email, guess.roll, guess.subSection])
-  // Names are excluded from pick() (it skips "name" headers), so take the
-  // best name-ish column directly: header says name, or mostly words.
-  const free = headers.map((_, c) => c).filter((c) => ![guess.email, guess.roll, guess.section, guess.subSection].includes(c))
-  guess.name =
-    free.find((c) => NAME_HEADER.test(headers[c])) ??
-    free.find((c) => share(c, NAME_VALUE) >= 0.9 && distinct(c) >= 2) ??
-    null
 
   // A roll/email column is enough: the admin can set one section for
   // every row when the file has no section column.
@@ -96,5 +86,5 @@ export function readTable(ws: Worksheet): TableResult {
 }
 
 function empty(): ColumnGuess {
-  return { roll: null, email: null, name: null, section: null, subSection: null }
+  return { roll: null, email: null, section: null, subSection: null }
 }

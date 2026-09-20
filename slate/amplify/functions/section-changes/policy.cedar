@@ -1,13 +1,13 @@
-// Who may change a timetable (see CLAUDE.md §2 and docs/PLAN.md).
+// Who may change a section's timetable (CLAUDE.md §2, revised Day 3).
 //
-// Every section has at most one class representative (CR), claimed by a
-// student of that section. A CR records changes (cancel, extra class, move)
-// for a *course*, and each change applies to every section of the batch
-// that takes the course. Every change records who made it.
+// Every section has at most one class representative (CR). A student
+// claims the role for their own section; after that, only that CR can
+// add a class to, cancel a class in, or undo a change on that section's
+// timetable. Every change is stamped with who made it.
 //
-// principal.section is resolved by the server from the student's verified
-// email (roll number), and resource.crs from the timetable and the CR list;
-// nothing here comes from the request itself.
+// principal.section is resolved by the server from the student's roll
+// number (their email), never taken from the request, so nobody can act
+// on a section they aren't in.
 
 // Claim: your own section, and only while it has no CR.
 permit (
@@ -17,31 +17,14 @@ permit (
 )
 when { principal.section == resource.key && !resource.hasCr };
 
-// Cancel / add / move a course's class: the CR of any section taking it.
+// Add / cancel / undo: only the section's current CR.
 permit (
   principal,
-  action in [Slate::Action::"Cancel", Slate::Action::"AddExtra", Slate::Action::"Move"],
-  resource is Slate::Course
-)
-when { resource.crs.contains(principal) };
-
-// Undo a whole change: whoever made it.
-permit (
-  principal,
-  action == Slate::Action::"UndoGroup",
-  resource is Slate::Change
-)
-when { resource.maker == principal };
-
-// Undo a change for one section only: that section's CR (e.g. another
-// section's CR added a class this section can't attend).
-permit (
-  principal,
-  action == Slate::Action::"UndoSection",
+  action in [Slate::Action::"AddClass", Slate::Action::"CancelClass", Slate::Action::"UndoChange"],
   resource is Slate::Section
 )
 when { resource.hasCr && resource.cr == principal };
 
-// Admins can do all of it (fix mistakes, step in after revoking a CR).
+// Admins can do all of it (e.g. fix a mistake, or step in when a CR is revoked).
 permit (principal, action, resource)
 when { principal.role == "ADMIN" };

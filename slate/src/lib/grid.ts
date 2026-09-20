@@ -36,74 +36,26 @@ export type BusyEntry = {
    * ingestion for easy per-section querying, then re-merged here for
    * anyone looking at multiple sections at once). */
   mergedIds?: string[];
-  /** The cancellation / move-away that takes this class off its date, if any. */
+  /** The CANCELLED ScheduleChange that matches this class, if any. */
   cancelled?: ChangeEntry;
 };
 
-export type ChangeKind = 'CANCELLED' | 'EXTRA' | 'MOVED_FROM' | 'MOVED_TO';
-
-/** A dated ScheduleChange row (one per affected section). */
 export type ChangeEntry = {
-  id?: string;
-  groupId?: string;
-  kind: ChangeKind;
-  date: string; // YYYY-MM-DD
-  /** Weekday of `date`; filled in by forWeek(). */
   day: string;
   startTime: string;
   endTime: string;
   courseId: string;
+  changeType: 'SCHEDULED' | 'CANCELLED';
   section?: string;
+  id?: string;
   room?: string | null;
-  relatedSlotId?: string | null;
-  /** Email of whoever made / undid the change (a CR, or an admin). */
+  /** Email of whoever made / undid the change (the section's CR). */
   changedBy?: string | null;
-  changedBySection?: string | null;
-  undoneBy?: string | null;
   undoneAt?: string | null;
-  createdAt?: string;
-};
-
-/** Takes a class away (struck through) vs. puts one on the grid. */
-export const removes = (k: ChangeKind) => k === 'CANCELLED' || k === 'MOVED_FROM';
-export const KIND_LABEL: Record<ChangeKind, string> = {
-  CANCELLED: 'Cancelled',
-  EXTRA: 'Extra class',
-  MOVED_FROM: 'Moved away',
-  MOVED_TO: 'Moved here',
 };
 
 /** "iit2024245@iiita.ac.in" -> "IIT2024245": how a change's author is shown. */
 export const personLabel = (email?: string | null) => (email ? email.split('@')[0].toUpperCase() : 'unknown');
-
-// ---------------------------------------------------------------- dates
-// Dates are plain YYYY-MM-DD strings in IST; the arithmetic runs in UTC so
-// the browser's own timezone can't shift a day.
-const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const asUtc = (date: string) => new Date(`${date}T00:00:00Z`);
-export const weekdayOf = (date: string) => DAY_NAMES[asUtc(date).getUTCDay()];
-export const addDays = (date: string, n: number) => new Date(asUtc(date).getTime() + n * 86400e3).toISOString().slice(0, 10);
-export const todayIst = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
-/** The Monday of the week containing `date` (Sat/Sun roll forward to the next week). */
-export function mondayOf(date: string): string {
-  const d = asUtc(date).getUTCDay();
-  return addDays(date, d === 0 ? 1 : d === 6 ? 2 : 1 - d);
-}
-/** The date of `day` (MON..FRI) in the week starting `monday`. */
-export const dateIn = (monday: string, day: string) => addDays(monday, DAYS.indexOf(day as Day));
-/** "2026-09-22" -> "Tue 22 Sep" */
-export function formatDate(date: string): string {
-  const d = asUtc(date);
-  return `${DAY_NAMES[d.getUTCDay()][0]}${DAY_NAMES[d.getUTCDay()].slice(1).toLowerCase()} ${d.getUTCDate()} ${d.toLocaleString('en', { month: 'short', timeZone: 'UTC' })}`;
-}
-
-/** The live changes that fall in the week starting `monday`, with their weekday set. */
-export function forWeek(changes: ChangeEntry[], monday: string): ChangeEntry[] {
-  const friday = addDays(monday, 4);
-  return changes
-    .filter((c) => !c.undoneAt && c.date >= monday && c.date <= friday)
-    .map((c) => ({ ...c, day: weekdayOf(c.date) }));
-}
 
 export type Cell = {
   day: Day;
@@ -144,21 +96,19 @@ function mergeSameClass(entries: BusyEntry[]): BusyEntry[] {
 
 /** Is this class the one a cancellation refers to? */
 const cancels = (c: ChangeEntry, b: BusyEntry) =>
-  removes(c.kind) &&
+  c.changeType === 'CANCELLED' &&
   c.day === b.day &&
-  (c.relatedSlotId && b.id
-    ? c.relatedSlotId === b.id
-    : c.courseId === b.courseId &&
-      overlaps(c.startTime, c.endTime, b.startTime, b.endTime) &&
-      (!c.section || !b.section || c.section === b.section));
+  c.courseId === b.courseId &&
+  overlaps(c.startTime, c.endTime, b.startTime, b.endTime) &&
+  (!c.section || !b.section || c.section === b.section);
 
-/** One week's grid: regular classes, with `changes` (already narrowed to
- * that week by forWeek) applied -- removals strike their class through,
- * additions show as their own blocks. */
-export function buildGrid(input: BusyEntry[], weekChanges: ChangeEntry[] = []): Cell[][] {
-  const live = weekChanges.filter((c) => !c.undoneAt);
-  const cancellations = live.filter((c) => removes(c.kind));
-  const changes = live.filter((c) => !removes(c.kind));
+export function buildGrid(input: BusyEntry[], allChanges: ChangeEntry[] = []): Cell[][] {
+  // A cancellation marks the class itself (struck through) rather than
+  // taking over the cell the way a newly scheduled session does.
+  // Undone changes stay in the history but no longer show on the grid.
+  const live = allChanges.filter((c) => !c.undoneAt);
+  const cancellations = live.filter((c) => c.changeType === 'CANCELLED');
+  const changes = live.filter((c) => c.changeType !== 'CANCELLED');
   const busy = cancellations.length
     ? input.map((b) => {
         const c = cancellations.find((c) => cancels(c, b));
@@ -181,3 +131,14 @@ export function buildGrid(input: BusyEntry[], weekChanges: ChangeEntry[] = []): 
   );
 }
 
+/** Cells free across every one of the given per-section busy lists. */
+export function freeAcrossAll(busyBySection: BusyEntry[][]): Cell[][] {
+  const grids = busyBySection.map((b) => buildGrid(b));
+  return DAYS.map((_, di) =>
+    HOURS.map((_, hi) => {
+      const cells = grids.map((g) => g[di][hi]);
+      const free = cells.every((c) => c.busy.length === 0);
+      return { ...cells[0], busy: free ? [] : cells.flatMap((c) => c.busy) };
+    }),
+  );
+}

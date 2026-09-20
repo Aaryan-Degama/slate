@@ -2,26 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
-import {
-  addDays,
-  buildGrid,
-  dateIn,
-  DAYS,
-  forWeek,
-  formatDate,
-  KIND_LABEL,
-  mondayOf,
-  personLabel,
-  todayIst,
-  type BusyEntry,
-  type ChangeEntry,
-} from './lib/grid'
-import { addExtra, cancelOccurrence, claimCr, sectionKey, undoChange, type ClassRep } from './lib/classReps'
-import { toActions, type Action } from './lib/changes'
-import ActionLine from './components/ActionLine'
+import { buildGrid, freeAcrossAll, personLabel, type BusyEntry, type ChangeEntry } from './lib/grid'
+import { addClass, cancelClass, claimCr, sectionKey, undoChange, type ClassRep } from './lib/classReps'
 import type { Profile } from './lib/useMyProfile'
 import { resolveSectionFromEmail } from './lib/rollLookup'
-import { touches } from '../amplify/functions/shared/attendance'
 import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
@@ -34,20 +18,13 @@ type ScheduleChangeRow = ChangeEntry & {
   program: string
   branch: string
   section: string
-  semester: number
+  semester?: number | null
   createdAt: string
+  undoneBy?: string | null
 }
 const listScheduleChanges = () => listAll<ScheduleChangeRow>(client.models.ScheduleChange.list)
 
-type RepProps = {
-  userId: string
-  reps: ClassRep[] | null
-  reloadReps: () => Promise<void>
-  repsError?: string
-  /** "What changed" feed: when the student last marked it seen. */
-  seenAt: string | null
-  markSeen: () => Promise<void>
-}
+type RepProps = { userId: string; reps: ClassRep[] | null; reloadReps: () => Promise<void> }
 
 export default function StudentDashboard({
   profile,
@@ -148,15 +125,9 @@ function SectionPicker({ onPick }: { onPick: (section: SectionRef) => void }) {
 }
 
 type Panel =
-  | { kind: 'add'; date: string; start: string; end: string }
-  | { kind: 'class'; entry: BusyEntry; date: string }
-  | { kind: 'change'; change: ChangeEntry }
-
-/** B covers B1/B2 (same rule as the server's reach()). */
-function reach(sections: string[]): string[] {
-  const set = new Set(sections)
-  return [...set].filter((s) => !(s.length === 2 && set.has(s[0]))).sort()
-}
+  | { kind: 'add'; day: string; start: string; end: string }
+  | { kind: 'class'; entry: BusyEntry }
+  | { kind: 'added'; change: ChangeEntry }
 
 function MyTimetable({
   section,
@@ -164,32 +135,18 @@ function MyTimetable({
   userId,
   reps,
   reloadReps,
-  repsError,
-  seenAt,
-  markSeen,
 }: { section: SectionRef; email: string } & RepProps) {
-  const [data, setData] = useState<{
-    batch: TimetableSlotRow[]
-    /** Home section's classes: what a CR acts on. */
-    home: TimetableSlotRow[]
-    /** The classes this student actually attends (may include other batches). */
-    slots: TimetableSlotRow[]
-    changes: ScheduleChangeRow[]
-    electivesUnconfirmed: boolean
-    irregular: boolean
-  } | null>(null)
-  const [monday, setMonday] = useState(() => mondayOf(todayIst()))
+  const [data, setData] = useState<{ slots: TimetableSlotRow[]; changes: ScheduleChangeRow[] } | null>(null)
+  const [showFree, setShowFree] = useState(false)
   const [groups, setGroups] = useState<{ section: string; subSection?: string; unknownSplit: string[] }>({
     section: section.section,
     unknownSplit: [],
   })
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [courseId, setCourseId] = useState('')
+  const [purpose, setPurpose] = useState('')
   const [room, setRoom] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [loadError, setLoadError] = useState('')
-  const [onlyMine, setOnlyMine] = useState(false)
 
   const load = useCallback(() => {
     // The linked profile may predate a B1/B2 upload, so re-resolve the
@@ -198,8 +155,8 @@ function MyTimetable({
     const picked = /^[A-Z]\d$/i.test(section.section)
       ? { section: section.section[0], subSection: section.section }
       : { section: section.section, subSection: section.subSection }
-    return Promise.all([listTimetableSlots(), listScheduleChanges(), resolveSectionFromEmail(email)])
-      .then(([slots, changes, resolved]) => {
+    return Promise.all([listTimetableSlots(), listScheduleChanges(), resolveSectionFromEmail(email)]).then(
+      ([slots, changes, resolved]) => {
         const subSection =
           picked.subSection ??
           (resolved && resolved.section === picked.section && resolved.semester === section.semester
@@ -213,70 +170,31 @@ function MyTimetable({
           ? []
           : [...new Set(batch.map((r) => r.section).filter((s) => s.length === 2 && s[0] === picked.section))].sort()
         setGroups({ section: picked.section, subSection, unknownSplit })
-        const home = batch.filter((r) => mine(r.section))
-        // The server knows exactly which classes this student attends (home
-        // section + enrollment exceptions). Use it when it's about the
-        // section shown; otherwise (a self-picked section) fall back to it.
-        const att =
-          resolved?.attends && resolved.program === section.program && resolved.branch === section.branch && resolved.semester === section.semester && resolved.section === picked.section
-            ? resolved.attends
-            : null
-        const ids = att ? new Set(att.slotIds) : null
         setData({
-          batch,
-          home,
-          slots: ids ? slots.data.filter((r) => ids.has(r.id!)) : home,
-          changes: changes.data.filter((r) =>
-            !r.date
-              ? false
-              : att
-                ? touches(r, att)
-                : r.program === section.program && r.branch === section.branch && r.semester === section.semester && mine(r.section),
+          slots: batch.filter((r) => mine(r.section)),
+          changes: changes.data.filter(
+            (r) =>
+              r.program === section.program &&
+              r.branch === section.branch &&
+              (r.semester == null || r.semester === section.semester) &&
+              mine(r.section),
           ),
-          electivesUnconfirmed: att?.electivesUnconfirmed ?? false,
-          irregular: att?.irregular ?? false,
         })
-        setLoadError('')
-      })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
+      },
+    )
   }, [section, email])
 
   useEffect(() => {
     load()
   }, [load])
 
-  const failed = loadError ? `Couldn't load your timetable: ${loadError}` : !reps ? repsError : ''
-  if (failed) return <p className="error">{failed}</p>
   if (!data || !reps) return <p>Loading your timetable...</p>
 
-  const today = todayIst()
   const key = sectionKey(section)
   const rep = reps.find((r) => r.sectionKey === key)
   const isCr = rep?.sub === userId
-  const week = forWeek(data.changes, monday)
-  const grid = buildGrid(data.slots, week)
-  const dayLabels = Object.fromEntries(DAYS.map((d) => [d, formatDate(dateIn(monday, d))]))
-
-  // Courses this CR can act for: every course their section takes.
-  const myCourses = [...new Set(data.home.map((r) => r.courseId))].sort()
-  // Sections a change to `course` reaches: the ones taught by the same
-  // professor as this section (same rule as the server).
-  const sectionsOf = (course: string) => {
-    const rows = data.batch.filter((r) => r.courseId === course && r.section !== '*')
-    const profs = new Set(rows.filter((r) => r.section[0] === groups.section && r.faculty).map((r) => r.faculty))
-    return reach(rows.filter((r) => !profs.size || profs.has(r.faculty)).map((r) => r.section))
-  }
-
-  // Only this week and next matter (older changes are deleted by the
-  // table's TTL). One line per action: a change for B and B1, or both
-  // halves of a move, is one action. New = made by someone else since the
-  // student last marked the list seen.
-  const thisMonday = mondayOf(today)
-  const nextMonday = addDays(thisMonday, 7)
-  const actions = toActions(data.changes).filter((x) => x.date >= thisMonday && x.date <= addDays(nextMonday, 4))
-  const isNew = (x: Action) => !x.undone && x.changedBy !== email && (!seenAt || x.createdAt > seenAt)
-  const newCount = actions.filter(isNew).length
-  const shown = onlyMine ? actions.filter((x) => x.changedBy === email) : actions
+  const grid = buildGrid(data.slots, data.changes)
+  const history = [...data.changes].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   const act = async (fn: () => Promise<void>) => {
     setBusy(true)
@@ -285,6 +203,7 @@ function MyTimetable({
       await fn()
       await Promise.all([load(), reloadReps()])
       setPanel(null)
+      setPurpose('')
       setRoom('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
@@ -292,11 +211,9 @@ function MyTimetable({
       setBusy(false)
     }
   }
-  const open = (p: Panel, date: string) => {
+  const open = (p: Panel) => {
     setError('')
-    if (date < today) return setError(`${formatDate(date)} has already passed.`)
     setPanel(p)
-    if (p.kind === 'add' && !myCourses.includes(courseId)) setCourseId(myCourses[0] ?? '')
   }
 
   return (
@@ -312,12 +229,6 @@ function MyTimetable({
           list.
         </p>
       )}
-      {data.irregular && (
-        <p className="meta">Your timetable includes courses you take outside your section, from your registrations.</p>
-      )}
-      {data.electivesUnconfirmed && (
-        <p className="meta">Showing every elective of your batch: your elective registrations haven't been uploaded yet.</p>
-      )}
       {data.slots.length === 0 && (
         <p className="error">
           No timetable has been ingested for this section yet — the identity link worked
@@ -325,50 +236,16 @@ function MyTimetable({
         </p>
       )}
 
-      <section className="feed">
-        <div className="feed-head">
-          <h2>What changed this week and next{newCount ? ` · ${newCount} new` : ''}</h2>
-          {newCount > 0 && (
-            <button type="button" onClick={() => markSeen()}>
-              Mark as seen
-            </button>
-          )}
-          {isCr && actions.length > 0 && (
-            <label className="day-toggle">
-              <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
-              Only ones I made
-            </label>
-          )}
-        </div>
-        {shown.length === 0 ? (
-          <p className="meta">
-            {onlyMine ? "You haven't made any changes for these two weeks." : 'No changes. Your regular timetable holds.'}
-          </p>
-        ) : (
-          <ul className="change-history">
-            {shown.map((x) => (
-              <ActionLine key={x.groupId} action={x} isNew={isNew(x)}>
-                {isCr && !x.undone && x.date >= today && (
-                  <button type="button" disabled={busy} onClick={() => act(() => undoChange(x.groupId))}>
-                    Undo
-                  </button>
-                )}
-              </ActionLine>
-            ))}
-          </ul>
-        )}
-      </section>
-
       <div className={`cr-bar${isCr ? ' is-cr' : ''}`}>
         {isCr ? (
           <span>
-            <strong>You're the CR for Sec {groups.section}.</strong> Click a free hour to add an extra class, or a
-            class to cancel it. A change reaches every section taking that course, with your name on it.
+            <strong>You're the CR for Sec {groups.section}.</strong> Click a free hour to add a class, or a class to
+            cancel it. Every change shows your name.
           </span>
         ) : rep ? (
           <span>
-            CR for Sec {groups.section}: <strong>{personLabel(rep.email)}</strong> since{' '}
-            {new Date(rep.createdAt).toLocaleDateString()}. Changes to your timetable come from your batch's CRs.
+            CR for Sec {groups.section}: <strong>{personLabel(rep.email)}</strong> · only they can change this
+            timetable.
           </span>
         ) : (
           <>
@@ -380,78 +257,58 @@ function MyTimetable({
         )}
       </div>
 
-      <div className="week-nav option-list">
-        <button type="button" className={monday === thisMonday ? 'active' : ''} onClick={() => setMonday(thisMonday)}>
-          This week · {formatDate(thisMonday)}
-        </button>
-        <button type="button" className={monday === nextMonday ? 'active' : ''} onClick={() => setMonday(nextMonday)}>
-          Next week · {formatDate(nextMonday)}
-        </button>
-      </div>
-
       {panel && (
         <div className="cr-panel">
           {panel.kind === 'add' && (
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                if (!courseId) return setError('Pick a course.')
+                if (!purpose.trim()) return setError('Say what the class is for.')
                 act(() =>
-                  addExtra({ courseId, date: panel.date, startTime: panel.start, endTime: panel.end, room: room.trim() || null }),
+                  addClass({ day: panel.day, startTime: panel.start, endTime: panel.end, room: room.trim() || null, purpose: purpose.trim() }),
                 )
               }}
             >
               <span>
-                Extra class on <strong>{formatDate(panel.date)} {panel.start}–{panel.end}</strong>
+                Add a class on <strong>{panel.day} {panel.start}–{panel.end}</strong>
               </span>
-              <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-                {myCourses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <input autoFocus placeholder="What for? e.g. IML makeup class" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
               <input placeholder="Room (optional)" value={room} onChange={(e) => setRoom(e.target.value)} />
-              <button type="submit" className="primary" disabled={busy || !courseId}>
-                {busy ? 'Adding...' : 'Add extra class'}
+              <button type="submit" className="primary" disabled={busy}>
+                {busy ? 'Adding...' : 'Add class'}
               </button>
-              {courseId && <span className="meta">For Sec {sectionsOf(courseId).join(', ')}</span>}
             </form>
           )}
           {panel.kind === 'class' && (
             <>
               <span>
-                <strong>{panel.entry.courseId}</strong> · {formatDate(panel.date)} {panel.entry.startTime}–
-                {panel.entry.endTime}
-                {panel.entry.cancelled
-                  ? ` · ${KIND_LABEL[panel.entry.cancelled.kind].toLowerCase()} by ${personLabel(panel.entry.cancelled.changedBy)}`
-                  : ` · Sec ${panel.entry.section}`}
+                <strong>{panel.entry.courseId}</strong> · {panel.entry.day} {panel.entry.startTime}–{panel.entry.endTime}
+                {panel.entry.cancelled ? ` · cancelled by ${personLabel(panel.entry.cancelled.changedBy)}` : ''}
               </span>
               {panel.entry.cancelled ? (
-                <button type="button" disabled={busy} onClick={() => act(() => undoChange(panel.entry.cancelled!.groupId!))}>
-                  {busy ? 'Undoing...' : 'Undo'}
+                <button type="button" disabled={busy} onClick={() => act(() => undoChange(panel.entry.cancelled!.id!))}>
+                  {busy ? 'Restoring...' : 'Restore class'}
                 </button>
               ) : (
                 <button
                   type="button"
                   className="danger"
                   disabled={busy}
-                  onClick={() => act(() => cancelOccurrence(panel.entry.mergedIds?.[0] ?? panel.entry.id!, panel.date))}
+                  onClick={() => act(() => cancelClass(panel.entry.mergedIds ?? [panel.entry.id!]))}
                 >
-                  {busy ? 'Cancelling...' : `Cancel on ${formatDate(panel.date)}`}
+                  {busy ? 'Cancelling...' : 'Cancel class'}
                 </button>
               )}
             </>
           )}
-          {panel.kind === 'change' && (
+          {panel.kind === 'added' && (
             <>
               <span>
-                <strong>{panel.change.courseId}</strong> · {formatDate(panel.change.date)} {panel.change.startTime}–
-                {panel.change.endTime} · {KIND_LABEL[panel.change.kind].toLowerCase()} by{' '}
-                {personLabel(panel.change.changedBy)}
+                <strong>{panel.change.courseId}</strong> · {panel.change.day} {panel.change.startTime}–{panel.change.endTime} ·
+                added by {personLabel(panel.change.changedBy)}
               </span>
-              <button type="button" className="danger" disabled={busy} onClick={() => act(() => undoChange(panel.change.groupId!))}>
-                {busy ? 'Undoing...' : 'Undo'}
+              <button type="button" className="danger" disabled={busy} onClick={() => act(() => undoChange(panel.change.id!))}>
+                {busy ? 'Removing...' : 'Remove this class'}
               </button>
             </>
           )}
@@ -462,20 +319,39 @@ function MyTimetable({
       )}
       {error && <p className="error">{error}</p>}
 
+      <button type="button" onClick={() => setShowFree((v) => !v)}>
+        {showFree ? 'Show my classes' : 'Show free slots for my class'}
+      </button>
       <TimetableGrid
-        grid={grid}
-        freeIsHighlighted
-        dayLabels={dayLabels}
-        onEmptyClick={
-          isCr ? (day, start, end) => open({ kind: 'add', date: dateIn(monday, day), start, end }, dateIn(monday, day)) : undefined
-        }
-        onBusyClick={
-          isCr ? (entry) => open({ kind: 'class', entry, date: dateIn(monday, entry.day) }, dateIn(monday, entry.day)) : undefined
-        }
-        onChangeClick={isCr ? (change) => open({ kind: 'change', change }, change.date) : undefined}
+        grid={showFree ? freeAcrossAll([data.slots]) : grid}
+        freeIsHighlighted={showFree}
+        onEmptyClick={isCr ? (day, start, end) => open({ kind: 'add', day, start, end }) : undefined}
+        onBusyClick={isCr && !showFree ? (entry) => open({ kind: 'class', entry }) : undefined}
+        onChangeClick={isCr && !showFree ? (change) => open({ kind: 'added', change }) : undefined}
       />
 
+      <h2>Change history</h2>
+      {history.length === 0 ? (
+        <p className="meta">No changes yet. Anything the CR adds or cancels shows up here with their name.</p>
+      ) : (
+        <ul className="change-history">
+          {history.map((c) => (
+            <li key={c.id} className={c.undoneAt ? 'undone' : ''}>
+              <span className={`kind ${c.changeType === 'SCHEDULED' ? 'added' : 'cancelled'}`}>
+                {c.changeType === 'SCHEDULED' ? 'Added' : 'Cancelled'}
+              </span>
+              <span>
+                <strong>{c.courseId}</strong> · {c.day} {c.startTime}–{c.endTime}
+                {c.room ? ` · ${c.room}` : ''}
+              </span>
+              <span className="meta">
+                by {personLabel(c.changedBy)} · {new Date(c.createdAt).toLocaleString()}
+                {c.undoneAt && ` · undone by ${personLabel(c.undoneBy)} ${new Date(c.undoneAt).toLocaleString()}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
-

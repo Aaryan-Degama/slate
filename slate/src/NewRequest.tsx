@@ -2,21 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
-import {
-  addDays,
-  buildGrid,
-  dateIn,
-  DAYS,
-  formatDate,
-  forWeek,
-  mondayOf,
-  todayIst,
-  type BusyEntry,
-  type Cell,
-  type ChangeEntry,
-} from './lib/grid'
+import { buildGrid, type BusyEntry, type Cell } from './lib/grid'
 import { listAll } from './lib/listAll'
-import { addExtra, moveOccurrence } from './lib/classReps'
+import { addClass, sectionKey } from './lib/classReps'
 
 const client = generateClient<Schema>()
 
@@ -25,170 +13,92 @@ const client = generateClient<Schema>()
 const findSlots = (client.queries as unknown as {
   findSlots: (a: {
     groups: string[]
-    dates: string[]
-    courseId?: string
-    ignoreSlotId?: string
     earliestTime?: string
     latestTime?: string
+    allowedDays?: string[]
     minDurationMins?: number
   }) => Promise<{ data: unknown; errors?: { message: string }[] }>
 }).findSlots
 
-type SlotRow = BusyEntry & { id: string; program: string; branch: string; semester: number; section: string; faculty?: string | null }
-type ChangeRow = ChangeEntry & { program: string; branch: string; semester: number; section: string }
-type Proposed = {
-  date: string
-  day: string
-  start: string
-  end: string
-  score: number
-  reason: string
-  room: string | null
-  /** Irregular attendees (e.g. drop-year students) who have another class then. */
-  clashCount: number
-  clashes: { students: string[]; has: string }[]
-}
+type SlotRow = BusyEntry & { program: string; branch: string; semester: number; section: string }
+type Group = { key: string; program: string; branch: string; semester: number; section: string }
+type Proposed = { day: string; start: string; end: string; score: number; reason: string; room: string | null }
 type Result = {
   slots: Proposed[]
   totalFree: number
-  totalWithClashes: number
-  irregulars: number
-  professors: string[]
-  blocking: { party: string; kind: string; unlocks: number; example: string | null; detail: string } | null
+  blocking: { section: string; unlocks: number; example: string | null; detail: string } | null
 }
-type MySection = { program: string; branch: string; semester: number; section: string }
-type Occurrence = { slot: SlotRow; date: string }
 
-/** B covers B1/B2 (same rule as the server's reach()). */
-function reach(sections: string[]): string[] {
-  const set = new Set(sections)
-  return [...set].filter((s) => !(s.length === 2 && set.has(s[0]))).sort()
-}
-const overlaps = (aS: string, aE: string, bS: string, bE: string) => aS < bE && bS < aE
+const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI']
+// Same rule as the find-slots Lambda: B1/B2 classes occupy part of B, B classes all of B1/B2.
 const blocks = (rowSection: string, g: string) =>
-  rowSection === '*' || rowSection === g || rowSection === g[0] || (g.length === 1 && rowSection[0] === g && rowSection.length === 2)
+  rowSection === g || rowSection === g[0] || (g.length === 1 && rowSection[0] === g && rowSection.length === 2)
+const overlaps = (aS: string, aE: string, bS: string, bE: string) => aS < bE && bS < aE
 
-/** CR tool: add an extra class for a course, or move one of its classes,
- * to a slot free for every section taking it and for its professor. The
- * change reaches all those sections (server-checked by Cedar). */
+type MySection = { program: string; branch: string; semester: number; section: string }
+
+/** Find a slot free for every chosen section. Anyone can look; only a CR
+ * can add the result, and only to their own section's timetable (other
+ * sections' CRs add it to theirs). */
 export default function NewRequest({ mySection, isCr }: { mySection: MySection | null; isCr: boolean }) {
   const [slots, setSlots] = useState<SlotRow[] | null>(null)
-  const [changes, setChanges] = useState<ChangeRow[]>([])
-  const [mode, setMode] = useState<'extra' | 'move'>('extra')
-  const [courseId, setCourseId] = useState('')
   const [picked, setPicked] = useState<string[]>([])
-  const [occurrence, setOccurrence] = useState<Occurrence | null>(null)
-  const [weeks, setWeeks] = useState<'this' | 'next' | 'both'>('both')
+  const [purpose, setPurpose] = useState('')
   const [earliestTime, setEarliestTime] = useState('09:00')
   const [latestTime, setLatestTime] = useState('17:30')
+  const [allowedDays, setAllowedDays] = useState<string[]>(DAYS)
   const [minDurationMins, setMinDurationMins] = useState(60)
-  const [status, setStatus] = useState<'idle' | 'searching' | 'results' | 'done'>('idle')
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'results' | 'confirmed'>('idle')
   const [error, setError] = useState('')
   const [result, setResult] = useState<Result | null>(null)
-  const [saving, setSaving] = useState<Proposed | null>(null)
-  const [done, setDone] = useState<Proposed | null>(null)
+  const [confirming, setConfirming] = useState<Proposed | null>(null)
+  const [confirmed, setConfirmed] = useState<Proposed | null>(null)
 
   useEffect(() => {
-    Promise.all([listAll<SlotRow>(client.models.TimetableSlot.list), listAll<ChangeRow>(client.models.ScheduleChange.list)])
-      .then(([s, c]) => {
-        setSlots(s.data)
-        setChanges(c.data.filter((r) => r.date && !r.undoneAt))
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+    listAll<SlotRow>(client.models.TimetableSlot.list).then(({ data }) => setSlots(data))
   }, [])
 
-  const today = todayIst()
-  const batch = useMemo(
-    () =>
-      mySection && slots
-        ? slots.filter((r) => r.program === mySection.program && r.branch === mySection.branch && r.semester === mySection.semester)
-        : [],
-    [slots, mySection],
-  )
-  // The courses this CR can act for: the ones their own section takes.
-  const myCourses = useMemo(
-    () => (mySection ? [...new Set(batch.filter((r) => blocks(r.section, mySection.section)).map((r) => r.courseId))].sort() : []),
-    [batch, mySection],
-  )
-  // The sections an extra class reaches: those taught by the same
-  // professor as the CR's own section (IML has a different one per
-  // section). Same rule as the server.
-  const courseSections = (c: string) => {
-    const rows = batch.filter((r) => r.courseId === c && r.section !== '*')
-    const profs = new Set(rows.filter((r) => mySection && r.section[0] === mySection.section[0] && r.faculty).map((r) => r.faculty))
-    return reach(rows.filter((r) => !profs.size || profs.has(r.faculty)).map((r) => r.section))
-  }
-
-  // Upcoming occurrences of the course for this CR's section (next two weeks).
-  const occurrences: Occurrence[] = useMemo(() => {
-    if (!courseId || !mySection) return []
-    const mine = batch.filter((r) => r.courseId === courseId && blocks(r.section, mySection.section))
-    const monday = mondayOf(today)
-    const out: Occurrence[] = []
-    for (let w = 0; w < 2; w++)
-      for (const day of DAYS) {
-        const date = dateIn(addDays(monday, 7 * w), day)
-        if (date < today) continue
-        for (const slot of mine.filter((r) => r.day === day)) {
-          const off = changes.some(
-            (c) => c.date === date && c.relatedSlotId === slot.id && (c.kind === 'CANCELLED' || c.kind === 'MOVED_FROM'),
-          )
-          if (!off) out.push({ slot, date })
-        }
-      }
-    return out
-  }, [courseId, mySection, batch, changes, today])
-
-  if (!isCr) return <p className="meta">Only a section's CR can change the timetable. Your CR is shown on My Timetable.</p>
-  if (!mySection) return <p className="error">Your section isn't linked yet. Open My Timetable first.</p>
-  if (!slots) return <p>{error || 'Loading...'}</p>
-
-  // A move keeps the class's own sections: every section it's held for together.
-  const together = (o: Occurrence) =>
-    reach(
-      batch
-        .filter(
-          (r) =>
-            r.courseId === o.slot.courseId &&
-            r.day === o.slot.day &&
-            r.startTime === o.slot.startTime &&
-            r.endTime === o.slot.endTime &&
-            (r.sessionType ?? '') === (o.slot.sessionType ?? ''),
-        )
-        .map((r) => r.section),
+  const groups = useMemo(() => {
+    const seen = new Map<string, Group>()
+    for (const r of slots ?? []) {
+      const key = `${r.program}|${r.branch}|${r.semester}|${r.section}`
+      if (!seen.has(key)) seen.set(key, { key, program: r.program, branch: r.branch, semester: r.semester, section: r.section })
+    }
+    return [...seen.values()].sort(
+      (a, b) => a.program.localeCompare(b.program) || a.branch.localeCompare(b.branch) || a.semester - b.semester || a.section.localeCompare(b.section),
     )
-  const sections = mode === 'move' ? (occurrence ? together(occurrence) : []) : picked
-  const chooseCourse = (c: string) => {
-    setCourseId(c)
-    setPicked(courseSections(c))
-    setOccurrence(null)
-  }
-  const toggle = (s: string) => setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]))
+  }, [slots])
+  const batches = useMemo(() => {
+    const m = new Map<string, Group[]>()
+    for (const g of groups) {
+      const k = `${g.program} ${g.branch} — Semester ${g.semester}`
+      m.set(k, [...(m.get(k) ?? []), g])
+    }
+    return [...m.entries()]
+  }, [groups])
+  const chosen = groups.filter((g) => picked.includes(g.key))
 
-  const monday = mondayOf(today)
-  const dates = [
-    ...(weeks !== 'next' ? DAYS.map((d) => dateIn(monday, d)) : []),
-    ...(weeks !== 'this' ? DAYS.map((d) => dateIn(addDays(monday, 7), d)) : []),
-  ].filter((d) => d >= today)
+  // Grid: a cell is busy if any chosen section has a class then.
+  const grid: Cell[][] | null = useMemo(() => {
+    if (!result || !slots) return null
+    const busy = slots.filter((r) =>
+      chosen.some((g) => r.program === g.program && r.branch === g.branch && r.semester === g.semester && blocks(r.section, g.section)),
+    )
+    return buildGrid(busy)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, slots])
 
-  const search = async (e: React.FormEvent) => {
+  const toggle = (key: string) => setPicked((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]))
+  const toggleDay = (d: string) => setAllowedDays((p) => (p.includes(d) ? p.filter((x) => x !== d) : [...p, d]))
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!courseId) return setError('Pick a course.')
-    if (mode === 'move' && !occurrence) return setError('Pick which class to move.')
-    if (!sections.length) return setError('Pick at least one section.')
-    if (!dates.length) return setError('No dates left in that range.')
-    setStatus('searching')
+    if (!chosen.length) return setError('Pick at least one section.')
+    if (!purpose.trim()) return setError('Say what this session is for.')
+    setStatus('submitting')
     setError('')
     try {
-      const res = await findSlots({
-        groups: sections.map((s) => `${mySection.program}|${mySection.branch}|${mySection.semester}|${s}`),
-        dates,
-        courseId,
-        ...(occurrence && mode === 'move' ? { ignoreSlotId: occurrence.slot.id } : {}),
-        earliestTime,
-        latestTime,
-        minDurationMins,
-      })
+      const res = await findSlots({ groups: chosen.map((g) => g.key), earliestTime, latestTime, allowedDays, minDurationMins })
       if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
       let payload = res.data
       while (typeof payload === 'string') payload = JSON.parse(payload)
@@ -196,98 +106,95 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
       setStatus('results')
     } catch (err) {
       setStatus('idle')
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      const msg = err instanceof Error ? err.message : 'Something went wrong.'
+      setError(msg)
     }
   }
 
-  const save = async (slot: Proposed) => {
-    setSaving(slot)
+  const myKey = mySection ? sectionKey(mySection) : null
+  const includesMine = chosen.some((g) => sectionKey(g) === myKey)
+
+  const others = chosen.filter((g) => sectionKey(g) !== myKey)
+  const canAdd = isCr && includesMine
+  const whyNot = !isCr
+    ? "Only your section's CR can add this to the timetable."
+    : 'Your own section isn’t one of the chosen sections, so there is nothing for you to add.'
+  const shareNote = (slot: Proposed) =>
+    `"${purpose.trim()}" on ${slot.day} ${slot.start}–${slot.end}${slot.room ? ` in ${slot.room}` : ''}. ` +
+    `Free for ${chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')}. ` +
+    `Please add it to your section on Slate.`
+
+  const confirm = async (slot: Proposed) => {
+    setConfirming(slot)
     setError('')
     try {
-      if (mode === 'move' && occurrence)
-        await moveOccurrence({ slotId: occurrence.slot.id, fromDate: occurrence.date, date: slot.date, startTime: slot.start, endTime: slot.end, room: slot.room })
-      else
-        await addExtra({
-          courseId,
-          date: slot.date,
-          startTime: slot.start,
-          endTime: slot.end,
-          room: slot.room,
-          sections: picked.length === courseSections(courseId).length ? [] : picked,
-        })
-      setDone(slot)
-      setStatus('done')
+      await addClass({ day: slot.day, startTime: slot.start, endTime: slot.end, room: slot.room, purpose: purpose.trim() })
+      setConfirmed(slot)
+      setStatus('confirmed')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save this change.')
+      setError(err instanceof Error ? err.message : 'Could not add this class.')
     } finally {
-      setSaving(null)
+      setConfirming(null)
     }
   }
 
   const reset = () => {
     setStatus('idle')
     setResult(null)
-    setDone(null)
+    setConfirmed(null)
     setError('')
   }
 
-  if (status === 'done' && done) {
+  if (status === 'confirmed' && confirmed) {
     return (
       <div className="new-request">
-        <h1>{mode === 'move' ? 'Class moved' : 'Extra class added'}</h1>
+        <h1>Added to your section</h1>
         <p>
-          {courseId} is on {formatDate(done.date)} {done.start}–{done.end}
-          {done.room ? ` in ${done.room}` : ''} for Sec {sections.join(', ')}
-          {mode === 'move' && occurrence ? `, instead of ${formatDate(occurrence.date)} ${occurrence.slot.startTime}` : ''}. Every
-          student in those sections sees it on their timetable, with your name on it.
+          "{purpose}" is on {confirmed.day} {confirmed.start}–{confirmed.end}
+          {confirmed.room ? ` in ${confirmed.room}` : ''}. It now shows on every timetable in your section, with your
+          name on it.
         </p>
+        {others.length > 0 && (
+          <>
+            <p>The other sections' CRs add it to theirs. Send them this:</p>
+            <pre className="share-note">{shareNote(confirmed)}</pre>
+          </>
+        )}
         <button type="button" onClick={reset}>
-          Make another change
+          Find another slot
         </button>
       </div>
     )
   }
 
-  if (status === 'results' && result) {
-    // Everyone's week (the week of the first proposed slot, or the first date searched).
-    const week = mondayOf(result.slots[0]?.date ?? dates[0])
-    const busy = batch.filter((r) => sections.some((s) => blocks(r.section, s)) && !(mode === 'move' && occurrence && r.id === occurrence.slot.id))
-    const grid = markFree(
-      buildGrid(busy, forWeek(changes.filter((c) => sections.some((s) => blocks(c.section, s))), week)),
-      result.slots.filter((p) => mondayOf(p.date) === week),
-    )
+  if (status === 'results' && result && grid) {
     return (
       <div className="new-request">
-        <h1>{mode === 'move' ? `Move ${courseId}` : `Extra ${courseId} class`}</h1>
+        <h1>Proposed slots</h1>
         <p className="subtitle">
-          Sec {sections.join(', ')}
-          {result.professors.length ? ` · ${result.professors.join(' & ')}` : ''}
-          {result.irregulars ? ` · ${result.irregulars} attending student(s) with their own timetable` : ''} ·{' '}
+          "{purpose}" for {chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')} ·{' '}
           {result.totalFree} slot(s) free for everyone
-          {result.totalWithClashes > result.totalFree ? `, ${result.totalWithClashes - result.totalFree} more with a few clashes` : ''}
         </p>
 
         {result.slots.length > 0 ? (
           <div className="proposed-list">
             {result.slots.map((s, i) => (
-              <div key={`${s.date}-${s.start}`} className={`card proposed${i === 0 ? ' best' : ''}`}>
+              <div key={`${s.day}-${s.start}`} className={`card proposed${i === 0 ? ' best' : ''}`}>
                 <div className="proposed-head">
                   <strong>
-                    {formatDate(s.date)} {s.start}–{s.end}
+                    {s.day} {s.start}–{s.end}
                   </strong>
                   {i === 0 && <span className="tag">Best fit</span>}
                   <span className="meta">{s.room ? `Room ${s.room} is free` : 'No free room found'}</span>
                 </div>
                 <p className="meta">{s.reason}</p>
-                {s.clashCount > 0 && (
-                  <p className="error">
-                    Clashes for {s.clashCount} student(s):{' '}
-                    {s.clashes.map((c) => `${c.students.join(', ')} (${c.has})`).join('; ')}. Tell them directly if you pick it.
-                  </p>
+                {canAdd ? (
+                  <button type="button" className="primary" disabled={confirming !== null} onClick={() => confirm(s)}>
+                    {confirming === s ? 'Adding...' : 'Add to my section'}
+                  </button>
+                ) : (
+                  <p className="meta">{whyNot}</p>
                 )}
-                <button type="button" className="primary" disabled={saving !== null} onClick={() => save(s)}>
-                  {saving === s ? 'Saving...' : mode === 'move' ? 'Move here' : 'Add this class'}
-                </button>
               </div>
             ))}
           </div>
@@ -298,12 +205,8 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
           </div>
         )}
 
-        <h2>Everyone's week · {formatDate(week)}</h2>
-        <TimetableGrid
-          grid={grid}
-          freeIsHighlighted
-          dayLabels={Object.fromEntries(DAYS.map((d) => [d, formatDate(dateIn(week, d))]))}
-        />
+        <h2>Everyone's week</h2>
+        <TimetableGrid grid={markFree(grid, result.slots)} freeIsHighlighted />
         {error && <p className="error">{error}</p>}
         <button type="button" onClick={reset}>
           Change the request
@@ -313,73 +216,42 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
   }
 
   return (
-    <form className="new-request" onSubmit={search}>
-      <h1>Make a change</h1>
-      <div className="option-list">
-        <button type="button" className={mode === 'extra' ? 'active' : ''} onClick={() => setMode('extra')}>
-          Extra class
-        </button>
-        <button type="button" className={mode === 'move' ? 'active' : ''} onClick={() => setMode('move')}>
-          Move a class
-        </button>
-      </div>
-      <p className="meta">To cancel a class, click it on My Timetable.</p>
+    <form className="new-request" onSubmit={submit}>
+      <h1>Find a slot</h1>
 
       <label>
-        Course
-        <select value={courseId} onChange={(e) => chooseCourse(e.target.value)}>
-          <option value="">Pick a course</option>
-          {myCourses.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        What's this session for?
+        <input placeholder="e.g. IML makeup class" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
       </label>
 
-      {courseId && mode === 'extra' && (
-        <>
-          <p>Sections this {courseId} professor teaches (all included by default):</p>
+      <p>Which sections need to attend?</p>
+      {!slots && <p className="meta">Loading sections...</p>}
+      {batches.map(([name, gs]) => (
+        <div key={name} className="section-pick">
+          <span className="meta">{name}</span>
           <div className="option-list">
-            {courseSections(courseId).map((s) => (
-              <button type="button" key={s} className={picked.includes(s) ? 'active' : ''} onClick={() => toggle(s)}>
-                Sec {s}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      {courseId && mode === 'move' && (
-        <>
-          <p>Which class?</p>
-          {occurrences.length === 0 && <p className="meta">No upcoming {courseId} classes for your section in the next two weeks.</p>}
-          <div className="option-list">
-            {occurrences.map((o) => (
+            {gs.map((g) => (
               <button
                 type="button"
-                key={`${o.slot.id}-${o.date}`}
-                className={occurrence === o ? 'active' : ''}
-                onClick={() => setOccurrence(o)}
+                key={g.key}
+                className={picked.includes(g.key) ? 'active' : ''}
+                onClick={() => toggle(g.key)}
               >
-                {formatDate(o.date)} {o.slot.startTime}–{o.slot.endTime}
-                {o.slot.sessionType ? ` (${o.slot.sessionType})` : ''} · Sec {together(o).join(', ')}
+                Sec {g.section}
               </button>
             ))}
           </div>
-        </>
-      )}
+        </div>
+      ))}
+
+      <p className="meta">
+        {chosen.length
+          ? `Selected: ${chosen.map((g) => `${g.branch} Sem ${g.semester} Sec ${g.section}`).join(', ')}`
+          : 'No sections selected yet. Click one or more above.'}
+      </p>
 
       <fieldset>
-        <legend>When</legend>
-        <label>
-          Weeks
-          <select value={weeks} onChange={(e) => setWeeks(e.target.value as typeof weeks)}>
-            <option value="this">This week</option>
-            <option value="next">Next week</option>
-            <option value="both">This week and next</option>
-          </select>
-        </label>
+        <legend>Constraints</legend>
         <label>
           Earliest start
           <input type="time" value={earliestTime} onChange={(e) => setEarliestTime(e.target.value)} />
@@ -396,17 +268,25 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
             <option value={180}>3 hours</option>
           </select>
         </label>
+        <div className="days">
+          {DAYS.map((d) => (
+            <label key={d} className="day-toggle">
+              <input type="checkbox" checked={allowedDays.includes(d)} onChange={() => toggleDay(d)} />
+              {d}
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       {error && <p className="error">{error}</p>}
-      <button type="submit" className="primary" disabled={status === 'searching'}>
-        {status === 'searching' ? 'Finding slots...' : 'Find free slots'}
+      <button type="submit" className="primary" disabled={status === 'submitting'}>
+        {status === 'submitting' ? 'Finding slots...' : 'Find free slots'}
       </button>
     </form>
   )
 }
 
-/** Only the proposed slots' hours count as "free" in the grid (not every empty cell). */
+/** Only the proposed slots' hours count as "free" in the grid (not every empty cell outside the constraints). */
 function markFree(grid: Cell[][], proposed: Proposed[]): Cell[][] {
   return grid.map((row) =>
     row.map((cell) =>

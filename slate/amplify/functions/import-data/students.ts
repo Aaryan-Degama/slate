@@ -1,26 +1,23 @@
 // Student-list rows -> checked records, using the admin-confirmed column
 // mapping and the batch's real sections from TimetableSlot.
 
-export type Mapping = { roll: number | null; email: number | null; name: number | null; section: number | null; subSection: number | null }
+export type Mapping = { roll: number | null; email: number | null; section: number | null; subSection: number | null }
 export type StudentRecord = {
   line: number
   year?: string
   roll?: number
-  /** IIT / IIB / IEC ... -- roll numbers restart per prefix. */
-  prefix?: string
-  name?: string
   section?: string
   subSection?: string
   problems: string[]
 }
 
-/** IIT2024245 / 2024245 / iit2024245@iiita.ac.in -> prefix + year + roll; 245 -> roll only. */
-export function parseId(value: string): { year?: string; roll?: number; prefix?: string } {
+/** IIT2024245 / 2024245 / iit2024245@iiita.ac.in -> year + roll; 245 -> roll only. */
+export function parseId(value: string): { year?: string; roll?: number } {
   const v = value.trim()
-  let m = /^([A-Za-z]{2,4})?(\d{4})(\d{3})$/.exec(v)
-  if (m) return { prefix: m[1]?.toUpperCase(), year: m[2], roll: Number(m[3]) }
-  m = /^([A-Za-z]{2,4})(\d{4})(\d+)@/.exec(v)
-  if (m) return { prefix: m[1].toUpperCase(), year: m[2], roll: Number(m[3]) }
+  let m = /^(?:[A-Za-z]{2,4})?(\d{4})(\d{3})$/.exec(v)
+  if (m) return { year: m[1], roll: Number(m[2]) }
+  m = /^[A-Za-z]{2,4}(\d{4})(\d+)@/.exec(v)
+  if (m) return { year: m[1], roll: Number(m[2]) }
   if (/^\d{1,3}$/.test(v)) return { roll: Number(v) }
   return {}
 }
@@ -44,9 +41,6 @@ export function buildStudentRecords(
     const fromRoll = parseId(cell(row, mapping.roll))
     const id = fromRoll.roll !== undefined ? fromRoll : parseId(cell(row, mapping.email))
     const problems: string[] = []
-    // Sheets mark some names with a trailing "*" (e.g. a hostel/day-scholar
-    // flag); it isn't part of the name.
-    const name = cell(row, mapping.name).replace(/\*+$/, '').trim() || undefined
     const fileSec = cell(row, mapping.section).toUpperCase() || undefined
     let fileSub = cell(row, mapping.subSection).toUpperCase() || undefined
     // A lab-group column that just says 1/2 means <section>1/<section>2.
@@ -64,7 +58,7 @@ export function buildStudentRecords(
       if (!subs.has(sub)) problems.push(`sub-section ${sub} isn't in this batch's timetable`)
       if (section && sub[0] !== section) problems.push(`sub-section ${sub} doesn't belong to section ${section}`)
     }
-    return { line: i + 1, year, roll: id.roll, prefix: id.prefix, name, section, subSection: sub, problems }
+    return { line: i + 1, year, roll: id.roll, section, subSection: sub, problems }
   })
 
   // Course lists (e.g. attendance registers) also carry students from other

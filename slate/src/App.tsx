@@ -1,21 +1,18 @@
 import { useState } from 'react'
 import { Authenticator } from '@aws-amplify/ui-react'
 import NewRequest from './NewRequest'
-import MyBatch from './MyBatch'
 import StudentDashboard from './StudentDashboard'
 import AdminDashboard from './AdminDashboard'
 import AdminTimetableEditor from './AdminTimetableEditor'
 import AdminUpload from './AdminUpload'
 import AdminStudents from './AdminStudents'
 import AdminClassReps from './AdminClassReps'
-import AdminActivity from './AdminActivity'
-import AdminEnrollments from './AdminEnrollments'
 import { useClassReps } from './lib/classReps'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
-type StudentTab = 'timetable' | 'batch' | 'find'
-type AdminTab = 'data' | 'upload' | 'students' | 'enrollments' | 'edit' | 'reps' | 'activity'
+type StudentTab = 'timetable' | 'find'
+type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps'
 
 function AppShell({
   profile,
@@ -84,8 +81,8 @@ function App() {
 function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) {
   const [studentTab, setStudentTab] = useState<StudentTab>('timetable')
   const [adminTab, setAdminTab] = useState<AdminTab>('data')
-  const { profile, loading, error, linkSection, markChangesSeen } = useMyProfile(userId)
-  const { reps, reload: reloadReps, error: repsError } = useClassReps()
+  const { profile, loading, error, linkSection } = useMyProfile(userId)
+  const { reps, reload: reloadReps } = useClassReps()
 
   if (loading || !profile) {
     return (
@@ -131,12 +128,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
             onClick: () => setAdminTab('students'),
           },
           {
-            key: 'enrollments',
-            label: 'Enrollments',
-            active: adminTab === 'enrollments',
-            onClick: () => setAdminTab('enrollments'),
-          },
-          {
             key: 'edit',
             label: 'Correct Timetable',
             active: adminTab === 'edit',
@@ -148,12 +139,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
             active: adminTab === 'reps',
             onClick: () => setAdminTab('reps'),
           },
-          {
-            key: 'activity',
-            label: 'Activity',
-            active: adminTab === 'activity',
-            onClick: () => setAdminTab('activity'),
-          },
         ]}
       >
         {adminTab === 'data' && <AdminDashboard onOpenStudents={() => setAdminTab('students')} />}
@@ -161,8 +146,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
         {adminTab === 'students' && <AdminStudents />}
         {adminTab === 'edit' && <AdminTimetableEditor />}
         {adminTab === 'reps' && <AdminClassReps />}
-        {adminTab === 'activity' && <AdminActivity />}
-        {adminTab === 'enrollments' && <AdminEnrollments />}
       </AppShell>
     )
   }
@@ -183,22 +166,11 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           onClick: () => setStudentTab('timetable'),
         },
         {
-          key: 'batch',
-          label: 'My Batch',
-          active: studentTab === 'batch',
-          onClick: () => setStudentTab('batch'),
+          key: 'find',
+          label: 'Find a Slot',
+          active: studentTab === 'find',
+          onClick: () => setStudentTab('find'),
         },
-        // Changing the timetable is a CR tool; students just see the result.
-        ...(isCr
-          ? [
-              {
-                key: 'find',
-                label: 'Make a change',
-                active: studentTab === 'find',
-                onClick: () => setStudentTab('find'),
-              },
-            ]
-          : []),
       ]}
     >
       {studentTab === 'timetable' && (
@@ -208,13 +180,9 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           userId={userId}
           reps={reps}
           reloadReps={reloadReps}
-          repsError={repsError}
-          seenAt={profile.changesSeenAt}
-          markSeen={markChangesSeen}
         />
       )}
-      {studentTab === 'batch' && <MyBatch />}
-      {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
+      {studentTab === 'find' && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
     </AppShell>
   )
 }

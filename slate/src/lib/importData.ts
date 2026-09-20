@@ -12,7 +12,6 @@ export type ImportArgs = {
   semester: number
   rollCol?: number | null
   emailCol?: number | null
-  nameCol?: number | null
   sectionCol?: number | null
   subSectionCol?: number | null
   admissionYear?: string | null

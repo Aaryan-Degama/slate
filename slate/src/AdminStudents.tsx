@@ -2,15 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import { listAll } from './lib/listAll'
-import StudentTable, { buildStudentRows } from './components/StudentTable'
 
 const client = generateClient<Schema>()
 
 type StudentRow = {
   admissionYear: string
   rollNumber: number
-  rollPrefix?: string | null
-  name?: string | null
   program: string
   branch: string
   semester: number
@@ -108,6 +105,7 @@ export default function AdminStudents() {
   const myRanges = ranges.filter(inBatch).sort((a, b) => a.admissionYear.localeCompare(b.admissionYear) || a.minRoll - b.minRoll)
   const sectionsInTimetable = [...new Set(slots.filter(inBatch).map((s) => s.section))].sort()
   const split = sectionsInTimetable.filter(isSub)
+  const sections = [...new Set(mine.map((s) => s.section))].sort()
   const lastUpdate = mine.map((s) => s.updatedAt ?? '').sort().at(-1)
   const problems = checkRanges(myRanges)
   const missingSplit = [...new Set(split.map((s) => s[0]))].filter(
@@ -272,17 +270,38 @@ export default function AdminStudents() {
             {error && <p className="error">{error}</p>}
           </div>
 
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2>Students</h2>
-            <p className="subtitle">
-              {mine.length} from uploaded lists, the rest matched by roll range
-              {lastUpdate ? ` · list last updated ${new Date(lastUpdate).toLocaleString()}` : ''}
-            </p>
-            <StudentTable
-              rows={buildStudentRows(mine, myRanges, batch.branch)}
-              fileName={`${batch.program}-${batch.branch}-sem${batch.semester}-students`}
-            />
-          </div>
+          <p className="meta">
+            {mine.length} students from uploaded lists
+            {lastUpdate ? ` · last updated ${new Date(lastUpdate).toLocaleString()}` : ''}
+          </p>
+          {sections.map((sec) => {
+            const inSec = mine.filter((s) => s.section === sec)
+            const groups = [...new Set(inSec.map((s) => s.subSection ?? ''))].sort()
+            return (
+              <div key={sec} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <h2>
+                  Section {sec} · {inSec.length} students
+                </h2>
+                {groups.map((g) => {
+                  const list = inSec
+                    .filter((s) => (s.subSection ?? '') === g)
+                    .sort((a, b) => a.admissionYear.localeCompare(b.admissionYear) || a.rollNumber - b.rollNumber)
+                  return (
+                    <div key={g || 'none'}>
+                      <strong>{g ? `${g} · ${list.length}` : groups.length > 1 ? `No sub-section · ${list.length}` : ''}</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {list.map((s) => (
+                          <span key={`${s.admissionYear}-${s.rollNumber}`} className="meta" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {s.admissionYear}·{String(s.rollNumber).padStart(3, '0')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </>
       )}
     </div>

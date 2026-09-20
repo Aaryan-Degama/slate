@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.6",
-    "@aws-sdk/client-cognito-identity-provider": "3.1134.0",
     "@cedar-policy/cedar-wasm": "^4.13.0",
     "aws-amplify": "^6.20.0",
     "exceljs": "^4.4.0",

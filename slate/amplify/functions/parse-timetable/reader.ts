@@ -15,9 +15,6 @@ const CATEGORY_RE = /^(PCC|PEC|OEC|BSC|ESC|HSMC|MDM|AEC|VAC|SEC|PC|PE|OE)\b/i
 const CORE_CATEGORY_RE = /^(PCC|BSC|ESC|PC)\b/i
 /** Placeholder section for classes on a sheet that names none (single-section batch). */
 export const WHOLE_BATCH = '*'
-// Cohort labels the real sheets use instead of sections, meaning the whole
-// batch: "All", "IT-BI" (both programmes in the batch), "Both".
-const WHOLE_BATCH_LABEL = /^(all|both|IT-BI|BI-IT)$/i
 
 /** "CC-3, 5254" / "(CC3- 5207)" / "CC-3 5154" -> "CC3-5254"; a bare "5118" stays as is. */
 function normRoom(raw: string): string | null | undefined {
@@ -55,9 +52,6 @@ export type Row = {
   faculty: string | null
   source: string
   duration: string
-  /** A basket elective: held for the whole batch (section '*'), attended
-   * only by the students enrolled in it (see Enrollment in the schema). */
-  isElective: boolean
 }
 type WorkRow = Omit<Row, 'program' | 'branch' | 'semester' | 'faculty'> & { longEndTime: string | null }
 export type Skipped = { coord: string; day: string; text: string; reason: string }
@@ -305,7 +299,6 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
       if (!line) continue
       const skip = (reason: string) => skipped.push({ coord: cell.coord, day: cell.day, text: line, reason })
       let code: string, kind: string, room: string | null, sections: string[]
-      let elective = false
       const m = ENTRY_RE.exec(line)
       const p = m ? null : PLAIN_RE.exec(line)
       if (m) {
@@ -313,28 +306,23 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
         ;[, code, kind, secs, room] = m as unknown as [string, string, string, string, string]
         sections = secs.trim().split(/[,\s]+/).filter(Boolean)
         if (!sections.every((s) => SECTION_RE.test(s))) {
-          // Not sections but a cohort label the sheets use for "everyone in
-          // this batch" ("All", "IT-BI"): a whole-batch class, elective or
-          // not per the course list. Anything else we can't place.
-          if (!WHOLE_BATCH_LABEL.test(secs.trim())) {
-            skip(`no section, only a cohort label ("${secs.trim()}")`)
-            continue
-          }
-          elective = !sheet.legend[code.trim()]?.core
-          sections = [WHOLE_BATCH]
+          skip(`no section, only a cohort label ("${secs.trim()}")`)
+          continue
         }
         room = room!.replace(/\s+/g, '')
       } else if (p) {
-        // No section named. A core course (per the course list) is taken by
-        // the whole batch; anything else the list knows is an elective --
-        // also whole-batch here, but only its enrolled students attend it.
+        // No section named: only a core course the whole section takes
+        // (per the course list) counts; electives stay out.
         ;[, code, kind] = p as unknown as [string, string, string]
         const info = sheet.legend[code.trim()]
-        if (!info) {
-          skip('no section, and not in the course list')
+        if (!info?.core) {
+          skip(
+            info
+              ? 'no section, and the course list marks it as an elective or shared course'
+              : 'no section, and not a core course in the course list',
+          )
           continue
         }
-        elective = !info.core
         const r = normRoom(p[3])
         if (r === undefined) {
           skip(`couldn't read the room "${p[3].trim()}"`)
@@ -358,7 +346,6 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
           sessionType: kind.toUpperCase(),
           section,
           room: room ?? '',
-          isElective: elective,
           source: cell.coord,
           duration: ambiguous ? 'ambiguous' : long ? 'merge' : 'single',
         })
@@ -379,17 +366,12 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
 
 // ---------------------------------------------------------------- step 3
 
-// An elective (section '*') is held for the whole batch, so its hours
-// count towards every group's total for that course.
-const applies = (rowSection: string, group: string) =>
-  rowSection === WHOLE_BATCH || rowSection === group || rowSection === group[0]
+const applies = (rowSection: string, group: string) => rowSection === group || rowSection === group[0]
 const short = (r: WorkRow) =>
   `${r.courseId} (${r.sessionType}) Sec ${r.section} ${r.day} ${r.startTime}-${r.endTime} [${r.source}]`
 
 function atomicGroups(rows: WorkRow[]) {
   const secs = new Set(rows.map((r) => r.section))
-  // '*' is only a group of its own when the sheet names no sections at all.
-  if (secs.size > 1) secs.delete(WHOLE_BATCH)
   return [...secs]
     .filter((s) => !(s.length === 1 && [...secs].some((x) => x.length === 2 && x[0] === s)))
     .sort()
@@ -487,9 +469,7 @@ export function processSheet(ws: Worksheet): SheetResult {
     sheet: ws.name,
     title: sheet.title,
     batch,
-    // Electives stay whole-batch; only unsectioned *core* rows need the
-    // admin to say which section they belong to.
-    needsSection: rows.some((r) => r.section === WHOLE_BATCH && !r.isElective),
+    needsSection: rows.some((r) => r.section === WHOLE_BATCH),
     rollRanges: sheet.rollRanges,
     rows: rows.map(({ longEndTime: _, ...r }) => {
       const fac = sheet.legend[r.courseId]?.faculty ?? {}
@@ -587,9 +567,6 @@ export function readTemplate(ws: Worksheet): SheetResult | null {
         courseId: course,
         sessionType: type,
         section,
-        // The Slate template asks for a section per row, so nothing in it
-        // is a whole-batch elective.
-        isElective: false,
         room: get(r, 'room').replace(/\s+/g, ''),
         source: coord,
         duration: 'template',
