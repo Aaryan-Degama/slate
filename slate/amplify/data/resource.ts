@@ -139,6 +139,10 @@ const schema = a.schema({
     .model({
       admissionYear: a.string().required(),
       rollNumber: a.integer().required(),
+      // The roll's letter prefix (IIT, IIB, IEC...). A batch can mix them
+      // -- IT Sem 5 holds both IIT and IIB students, and their numbering
+      // restarts per prefix, so IIB2024001 and IIT2024001 are two people.
+      rollPrefix: a.string(),
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),

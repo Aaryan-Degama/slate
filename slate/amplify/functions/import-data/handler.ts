@@ -214,7 +214,14 @@ export const handler = async (event: Event) => {
       await batchWrite(
         SS,
         added.map((r) =>
-          newItem('StudentSection', { ...batch, admissionYear: r.year, rollNumber: r.roll, section: r.section, subSection: r.subSection }),
+          newItem('StudentSection', {
+            ...batch,
+            admissionYear: r.year,
+            rollNumber: r.roll,
+            rollPrefix: r.prefix,
+            section: r.section,
+            subSection: r.subSection,
+          }),
         ),
       )
       for (const c of changed)

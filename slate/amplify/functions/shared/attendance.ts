@@ -24,6 +24,7 @@ export function parseRoll(value: string) {
   const [, prefix, year, rollStr] = m
   return {
     rollId: `${prefix}${year}${rollStr}`.toUpperCase(),
+    prefix: prefix.toUpperCase(),
     branch: prefix.slice(1).toUpperCase(),
     year,
     roll: parseInt(rollStr, 10),
@@ -36,7 +37,11 @@ export const rollIdOf = (branch: string, year: string, roll: number) => `I${bran
 export function homeOf(value: string, students: Row[], ranges: Row[]): Home | null {
   const p = parseRoll(value)
   if (!p) return null
-  const ok = (r: Row) => String(r.branch).toUpperCase() === p.branch && r.admissionYear === p.year
+  // A batch can mix prefixes (IT Sem 5 holds IIT and IIB students), and
+  // numbering restarts per prefix -- so match the prefix when the row has
+  // one, and fall back to the branch for rows imported before that.
+  const ok = (r: Row) =>
+    (r.rollPrefix ? String(r.rollPrefix).toUpperCase() === p.prefix : String(r.branch).toUpperCase() === p.branch) && r.admissionYear === p.year
   const student = students.filter((r) => ok(r) && Number(r.rollNumber) === p.roll).sort((a, b) => Number(b.semester) - Number(a.semester))[0]
   if (student) {
     const sec = String(student.section)
@@ -50,7 +55,9 @@ export function homeOf(value: string, students: Row[], ranges: Row[]): Home | nu
       ...(sub ? { subSection: sub } : {}),
     }
   }
-  const hits = ranges.filter((r) => ok(r) && p.roll >= Number(r.minRoll) && p.roll <= Number(r.maxRoll))
+  // Roll ranges are per branch (they carry no prefix).
+  const inBranch = (r: Row) => String(r.branch).toUpperCase() === p.branch && r.admissionYear === p.year
+  const hits = ranges.filter((r) => inBranch(r) && p.roll >= Number(r.minRoll) && p.roll <= Number(r.maxRoll))
   const whole = hits.find((r) => String(r.section).length === 1)
   const sub = hits.find((r) => String(r.section).length === 2)
   const hit = whole ?? sub

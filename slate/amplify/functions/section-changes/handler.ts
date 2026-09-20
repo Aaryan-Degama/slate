@@ -290,8 +290,11 @@ export const handler = async (event: Event) => {
         students: mine
           .filter((r) => String(r.section)[0] === section)
           .map((r) => {
-            const roll = `${String(r.admissionYear)}${String(r.rollNumber).padStart(3, '0')}`
-            return { id: `I${String(r.branch).toUpperCase()}${roll}`, subSection: r.subSection ?? (String(r.section).length === 2 ? r.section : null) }
+            const prefix = r.rollPrefix ? String(r.rollPrefix) : `I${String(r.branch).toUpperCase()}`
+            return {
+              id: `${prefix}${r.admissionYear}${String(r.rollNumber).padStart(3, '0')}`,
+              subSection: r.subSection ?? (String(r.section).length === 2 ? r.section : null),
+            }
           })
           .sort((x, y) => x.id.localeCompare(y.id)),
         // No student list uploaded for this section: say which rolls it covers instead.

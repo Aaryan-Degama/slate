@@ -8,6 +8,7 @@ const client = generateClient<Schema>()
 type StudentRow = {
   admissionYear: string
   rollNumber: number
+  rollPrefix?: string | null
   program: string
   branch: string
   semester: number
@@ -307,7 +308,7 @@ function StudentTable({
 
   const rows = useMemo(() => {
     const out: TableRow[] = students.map((s) => ({
-      rollId: `I${s.branch.toUpperCase()}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`,
+      rollId: `${s.rollPrefix || `I${s.branch.toUpperCase()}`}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`,
       admissionYear: s.admissionYear,
       rollNumber: s.rollNumber,
       section: s.section[0],
@@ -404,10 +405,7 @@ function StudentTable({
                 <th>#</th>
                 {header('rollId', 'Roll')}
                 {header('admissionYear', 'Year')}
-                {header('rollNumber', 'Number')}
                 {header('section', 'Section')}
-                {header('subSection', 'Group')}
-                {header('source', 'From')}
               </tr>
             </thead>
             <tbody>
@@ -416,10 +414,7 @@ function StudentTable({
                   <td className="meta">{i + 1}</td>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.rollId}</td>
                   <td>{r.admissionYear}</td>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.rollNumber}</td>
-                  <td>{r.section}</td>
-                  <td>{r.subSection || '—'}</td>
-                  <td className="meta">{r.source === 'list' ? 'list' : 'range'}</td>
+                  <td>{r.subSection || r.section}</td>
                 </tr>
               ))}
             </tbody>
