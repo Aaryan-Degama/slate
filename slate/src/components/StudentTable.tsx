@@ -125,6 +125,14 @@ export default function StudentTable({
     <>
       <div className="filter-bar">
         <input placeholder="Search name or roll" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="sort-toggle" role="group" aria-label="Sort by">
+          <button type="button" className={sort.key === 'name' ? 'active' : ''} onClick={() => setSort({ key: 'name', dir: 1 })}>
+            Name
+          </button>
+          <button type="button" className={sort.key === 'rollId' ? 'active' : ''} onClick={() => setSort({ key: 'rollId', dir: 1 })}>
+            Roll
+          </button>
+        </div>
         <select value={section} onChange={(e) => setSection(e.target.value)}>
           <option value="">All sections ({rows.length})</option>
           {sections.map((s) => (

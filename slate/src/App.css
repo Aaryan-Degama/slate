@@ -647,3 +647,28 @@ button.link {
     padding: 14px;
   }
 }
+
+/* Sort by what people recognise: a name or a roll number. */
+.sort-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.sort-toggle button {
+  border: none;
+  border-radius: 0;
+  padding: 7px 14px;
+  font-size: 14px;
+  background: var(--bg);
+}
+
+.sort-toggle button + button {
+  border-left: 1px solid var(--border);
+}
+
+.sort-toggle button.active {
+  background: var(--ink);
+  color: #fff;
+}

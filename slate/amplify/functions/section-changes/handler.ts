@@ -143,9 +143,21 @@ const sectionEntity = (ctx: Ctx, key: string): Entity => {
 }
 
 /** An offering, with the CRs of the sections it is timetabled for. */
-const offeringEntity = (ctx: Ctx, offering: Row): Entity => {
-  const sections = ((offering.sections as string[]) ?? []).map((sec) => `${batchKey(offering)}|${String(sec)[0]}`)
-  const crs = ctx.reps.filter((r) => sections.includes(String(r.sectionKey))).map((r) => ({ __entity: user(String(r.sub)) }))
+/** An offering, with the CRs who may change it: the CR of any section
+ * whose students are registered in it. Taking this from the registrations
+ * rather than the section label is what gives electives and minors a CR --
+ * they're taught to "the batch", so no single section owns them, but the
+ * students in them do belong to sections. */
+async function offeringEntity(ctx: Ctx, offering: Row): Promise<Entity> {
+  const [regs, students] = await Promise.all([scanAll(RG), scanAll(SS)])
+  const rolls = new Set(regs.filter((r) => r.offeringKey === offering.offeringKey).map((r) => String(r.rollId)))
+  const rollOf = (st: Row) =>
+    `${st.rollPrefix ? String(st.rollPrefix) : `I${String(st.branch).toUpperCase()}`}${st.admissionYear}${String(st.rollNumber).padStart(3, '0')}`
+  const sections = new Set(students.filter((st) => rolls.has(rollOf(st))).map((st) => keyOf(st)))
+  // A timetabled section with no registrations yet still counts.
+  for (const sec of (offering.sections as string[]) ?? [])
+    if (sec !== '*') sections.add(`${batchKey(offering)}|${String(sec)[0]}`)
+  const crs = ctx.reps.filter((r) => sections.has(String(r.sectionKey))).map((r) => ({ __entity: user(String(r.sub)) }))
   return { uid: { type: 'Slate::Offering', id: String(offering.offeringKey) }, attrs: { crs }, parents: [] }
 }
 
@@ -400,7 +412,7 @@ export const handler = async (event: Event) => {
       if (weekdayOf(date) !== meeting.day) throw new Error(`That class isn't held on ${weekdayOf(date)}.`)
       const offering = offerings.find((o) => o.offeringKey === meeting.offeringKey)
       if (!offering) throw new Error('That class has no offering.')
-      authorize(ctx, 'Cancel', offeringEntity(ctx, offering), "Only a CR of this class's section can cancel it.")
+      authorize(ctx, 'Cancel', await offeringEntity(ctx, offering), 'Only a CR of a section taking this class can cancel it.')
       const clash = (await scanAll(SC)).find(
         (c) => live(c) && c.date === date && c.meetingId === meeting.id && (c.kind === 'CANCELLED' || c.kind === 'MOVED_FROM'),
       )
@@ -415,7 +427,7 @@ export const handler = async (event: Event) => {
       if (weekdayOf(date) === 'SUN') throw new Error('Pick a day from Monday to Saturday.')
       const offering = (await scanAll(OF)).find((o) => o.offeringKey === a.offeringKey)
       if (!offering) throw new Error('No such class.')
-      authorize(ctx, 'AddExtra', offeringEntity(ctx, offering), "Only a CR of this class's section can add a class for it.")
+      authorize(ctx, 'AddExtra', await offeringEntity(ctx, offering), 'Only a CR of a section taking this class can add a class for it.')
       await writeRows([
         newRow(ctx, randomUUID(), { ...changeFields(offering, null, 'EXTRA', date), startTime: a.startTime, endTime: a.endTime, ...(a.room ? { room: a.room } : {}) }),
       ])
@@ -432,7 +444,7 @@ export const handler = async (event: Event) => {
       if (weekdayOf(fromDate) !== meeting.day) throw new Error(`That class isn't held on ${weekdayOf(fromDate)}.`)
       const offering = offerings.find((o) => o.offeringKey === meeting.offeringKey)
       if (!offering) throw new Error('That class has no offering.')
-      authorize(ctx, 'Move', offeringEntity(ctx, offering), "Only a CR of this class's section can move it.")
+      authorize(ctx, 'Move', await offeringEntity(ctx, offering), 'Only a CR of a section taking this class can move it.')
       const groupId = randomUUID()
       await writeRows([
         newRow(ctx, groupId, changeFields(offering, meeting, 'MOVED_FROM', fromDate)),

@@ -25,6 +25,19 @@ And "the timetable" isn't one thing. A fifth-semester IT student takes core cour
 
 Deliberately not built: voting or polls, chat, recurring changes, student-editable timetables.
 
+## Try it without signing up
+
+These accounts are already set up, so you can look around without creating one. Password for all four: **`SlateDemo#2026`**
+
+| Sign in as | You get |
+|---|---|
+| `iit2024245@iiita.ac.in` | A fifth-semester IT student **and Sec C's class representative** — cancel a class, add an extra one, move or shorten one |
+| `iit2024059@iiita.ac.in` | Another student, Sec A: a different elective, plus a third-semester course taken with the junior batch |
+| `iib2024001@iiita.ac.in` | A B.Tech BI student in the same section, to see how two classmates' weeks differ |
+| `demo-admin@iiita.ac.in` | The admin side: uploads, students, class reps, activity |
+
+They're real accounts on the live app, so changes one makes are visible to the others — which is the point.
+
 ## How the data works
 
 The institute's registration list says who takes what, from whom. The timetable sheets say when and where each professor teaches each course. Put together, they answer "what is *this student's* week?" exactly, with no section guesswork:

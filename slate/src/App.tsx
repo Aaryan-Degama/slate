@@ -9,13 +9,12 @@ import AdminUpload from './AdminUpload'
 import AdminStudents from './AdminStudents'
 import AdminClassReps from './AdminClassReps'
 import AdminActivity from './AdminActivity'
-import AdminEnrollments from './AdminEnrollments'
 import { useClassReps } from './lib/classReps'
 import { useMyProfile, type Profile } from './lib/useMyProfile'
 import './App.css'
 
 type StudentTab = 'timetable' | 'batch' | 'find'
-type AdminTab = 'data' | 'upload' | 'students' | 'enrollments' | 'edit' | 'reps' | 'activity'
+type AdminTab = 'data' | 'upload' | 'students' | 'edit' | 'reps' | 'activity'
 
 function AppShell({
   profile,
@@ -131,12 +130,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
             onClick: () => setAdminTab('students'),
           },
           {
-            key: 'enrollments',
-            label: 'Enrollments',
-            active: adminTab === 'enrollments',
-            onClick: () => setAdminTab('enrollments'),
-          },
-          {
             key: 'edit',
             label: 'Correct Timetable',
             active: adminTab === 'edit',
@@ -162,7 +155,6 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
         {adminTab === 'edit' && <AdminTimetableEditor />}
         {adminTab === 'reps' && <AdminClassReps />}
         {adminTab === 'activity' && <AdminActivity />}
-        {adminTab === 'enrollments' && <AdminEnrollments />}
       </AppShell>
     )
   }

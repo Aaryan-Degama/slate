@@ -2,6 +2,8 @@
 
 **Live:** https://main.dosqfo1xoqa7l.amplifyapp.com · **Repo:** https://github.com/kavyan256/slate · **Track:** Ship It
 
+**Sign in without registering:** `iit2024245@iiita.ac.in` (a student who is also a CR), `iit2024059@iiita.ac.in` (another student), `demo-admin@iiita.ac.in` (admin) — password `SlateDemo#2026` for all.
+
 ---
 
 ## The problem
