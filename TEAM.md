@@ -11,6 +11,7 @@ Split along architecture boundaries so nobody edits the same files. Sync points 
 This is the part that has to work for the demo to have substance, and the part judges will actually ask about — own it end to end so you can speak to it fluently in the video's "what we learned" segment.
 
 **Owns:**
+
 - Cognito setup (IIITA domain gate, `role` attribute), Cedar policy for Confirm & Notify
 - Amplify Gen 2 schema (`amplify/data/resource.ts`) — the four models in `CLAUDE.md` §4
 - Textract + Bedrock ingestion pipeline on real AAA PDFs
@@ -24,6 +25,7 @@ This is the part that has to work for the demo to have substance, and the part j
 ## Jalendu — Frontend: New Request + Proposed Slots
 
 **Owns:**
+
 - `New Request` screen — section picker, constraint inputs, submit
 - `Proposed Slots` screen — ranked list with reasoning shown, room suggestion, and the no-slot-found blocking explanation UI
 - Works against the Amplify-generated typed client once Kavyan's schema is deployed; can build against mock data first so this isn't blocked
@@ -35,6 +37,7 @@ This is the part that has to work for the demo to have substance, and the part j
 ## Degama — Frontend: Confirm & Notify, deployment, data fallback, demo ops
 
 **Owns:**
+
 - `Confirm & Notify` screen — pick the winning slot, role-gated button (only shows for `role: FACULTY`), triggers the SES flow
 - Amplify Hosting deployment and environment config — the person who can answer "is the live URL actually up" at any moment
 - **Hand-structured fallback data** (`CLAUDE.md` §6/§7) — if the Textract gate test comes back weak on some programs, manually structure real timetable data from the actual PDFs so the demo never runs on fabricated data
@@ -58,4 +61,4 @@ This is the part that has to work for the demo to have substance, and the part j
 - **Separate Claude Code sessions per person**, working in different parts of the tree (`amplify/` vs `src/screens/NewRequest` vs `src/screens/ConfirmNotify`) — avoids conflicting generated edits.
 - **Small, frequent commits and pulls at the sync points above** — don't diverge for a full day before merging.
 - **Keep a running note of what AI generated vs. hand-written**, per person, as you go — `CREDITS.md` needs this and reconstructing it on day 4 is worse than logging it now.
-- **Never let AI-generated code substitute for understanding on the parts that get demoed or discussed** — screens can be fully AI-scaffolded since they're mechanical; the algorithm and the AWS architecture choices cannot, since those are exactly what "idea/impact," "learning," and judge Q&A will probe.
+- **Never let AI-generated code substitute for understanding on the parts that get demoed or discussed** — screens can be fully AI-scaffolded since they're mechanical; the algorithm and the AWS architecture choices cannot, since those are exactly what "idea/impact," "learning," and judge Q&A will probe.i
