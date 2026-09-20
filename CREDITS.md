@@ -52,5 +52,5 @@ Everything Slate uses that we didn't write during the event.
 
 ## AI tools
 
-- **Claude Code** (Anthropic), using the Claude Sonnet 5 and Claude Opus 5 models. It was used throughout: designing and writing most of the backend (schema, authorization, the three Lambdas including the timetable reader and slot finder), the frontend screens, the data-audit scripts, debugging, deployment, and these docs. The team set direction, supplied and checked the real data against their own timetables, caught extraction errors, and made the product decisions.
+- **Claude Code** (Anthropic), using the Claude Sonnet 5 and Claude Opus 5 models. It was used throughout: designing and writing most of the backend (schema, authorization, the four Lambdas including the timetable reader, the registration matcher and the slot finder), the frontend screens, the data-audit scripts, debugging, deployment, and these docs. The team set direction, supplied and checked the real data against their own timetables, caught extraction errors, and made the product decisions.
 <!-- Teammates: add any other AI tools you used (e.g. for your own parts of the frontend). The rules require every one to be listed. -->
