@@ -33,16 +33,10 @@
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: var(--now);
-  color: #15181d;
-  font-family: var(--display);
-  font-weight: 800;
-  font-size: 15px;
+  display: block;
 }
 
 .top-nav-items {

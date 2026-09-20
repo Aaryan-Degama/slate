@@ -37,9 +37,7 @@ function AppShell({
     <div className="app-shell">
       <header className="topbar-nav">
         <div className="brand">
-          <span className="brand-mark">
-            <img src="/logo.svg" alt="" />
-          </span>
+          <img className="brand-mark" src="/slate-mark.svg" alt="" width="26" height="26" />
           <span>Slate</span>
         </div>
         <nav className="top-nav-items">
