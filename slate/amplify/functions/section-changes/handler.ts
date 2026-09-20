@@ -99,7 +99,7 @@ function mondayOf(date: string): string {
 function checkDate(date: unknown): string {
   if (typeof date !== 'string' || !DATE_RE.test(date)) throw new Error('Pick a date.')
   if (date < todayIst()) throw new Error('That date has already passed.')
-  if (date > addDays(mondayOf(todayIst()), 11)) throw new Error('Changes can only be made for this week and next.')
+  if (date > addDays(mondayOf(todayIst()), 12)) throw new Error('Changes can only be made for this week and next.')
   return date
 }
 /** TTL (epoch seconds): the Monday after the change's week, when it stops being shown. */
@@ -412,7 +412,7 @@ export const handler = async (event: Event) => {
     case 'addExtra': {
       const date = checkDate(a.date)
       checkTimes(a)
-      if (!['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(weekdayOf(date))) throw new Error('Pick a weekday.')
+      if (weekdayOf(date) === 'SUN') throw new Error('Pick a day from Monday to Saturday.')
       const offering = (await scanAll(OF)).find((o) => o.offeringKey === a.offeringKey)
       if (!offering) throw new Error('No such class.')
       authorize(ctx, 'AddExtra', offeringEntity(ctx, offering), "Only a CR of this class's section can add a class for it.")

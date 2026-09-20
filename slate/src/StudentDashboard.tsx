@@ -234,7 +234,7 @@ function MyTimetable({
   // student last marked the list seen.
   const thisMonday = mondayOf(today)
   const nextMonday = addDays(thisMonday, 7)
-  const actions = toActions(data.changes).filter((x) => x.date >= thisMonday && x.date <= addDays(nextMonday, 4))
+  const actions = toActions(data.changes).filter((x) => x.date >= thisMonday && x.date <= addDays(nextMonday, 5))
   const isNew = (x: Action) => !x.undone && x.changedBy !== email && (!seenAt || x.createdAt > seenAt)
   const newCount = actions.filter(isNew).length
   const shown = onlyMine ? actions.filter((x) => x.changedBy === email) : actions
@@ -491,7 +491,6 @@ function MyTimetable({
       <TimetableGrid
         grid={grid}
         today={monday === thisMonday ? DAYS[new Date(`${today}T00:00:00Z`).getUTCDay() - 1] : undefined}
-        freeIsHighlighted
         dayLabels={dayLabels}
         onEmptyClick={
           isCr ? (day, start, end) => open({ kind: 'add', date: dateIn(monday, day), start, end }, dateIn(monday, day)) : undefined
@@ -507,55 +506,70 @@ function MyTimetable({
 }
 
 
-/** The next class today, with how long until it starts -- what a student
- * opens the app to find out. Cancelled classes are skipped, because the
- * point is where to actually be. */
+/** What a student opens the app to find out: the class they're in, the one
+ * coming, or -- on a Sunday or after the last class -- the next one there
+ * is. Cancelled classes are skipped, because the point is where to be. */
 function UpNext({ busy, changes }: { busy: BusyEntry[]; changes: ScheduleChangeRow[] }) {
   const today = todayIst()
-  const day = DAYS[new Date(`${today}T00:00:00Z`).getUTCDay() - 1]
-  const week = forWeek(changes, mondayOf(today)).filter((c) => c.date === today)
-  const grid = day ? buildGrid(busy, week) : null
   const now = new Date(Date.now() + 5.5 * 3600e3)
   const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
   const at = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+  const dayOf = (date: string) => DAYS[new Date(`${date}T00:00:00Z`).getUTCDay() - 1]
 
-  const classesToday = grid
-    ? [
-        ...grid[DAYS.indexOf(day as (typeof DAYS)[number])]
-          .flatMap((cell) => cell.busy.filter((b) => !b.cancelled).map((b) => ({ start: b.startTime, end: b.endTime, what: b.courseId, where: b.room })))
-          .concat(
-            week
-              .filter((c) => !removesChange(c.kind))
-              .map((c) => ({ start: c.startTime, end: c.endTime, what: c.courseId, where: c.room ?? null })),
-          )
-          .reduce((seen, c) => (seen.some((x) => x.start === c.start && x.what === c.what) ? seen : [...seen, c]), [] as { start: string; end: string; what: string; where: string | null | undefined }[]),
-      ].sort((a, b) => a.start.localeCompare(b.start))
-    : []
+  /** Every class actually happening on a date: the week's classes minus
+   * that date's cancellations, plus its extra classes. */
+  const classesOn = (date: string) => {
+    const day = dayOf(date)
+    if (!day) return []
+    const dated = forWeek(changes, mondayOf(date)).filter((c) => c.date === date)
+    const grid = buildGrid(busy, dated)
+    const regular = grid[DAYS.indexOf(day)].flatMap((cell) =>
+      cell.busy.filter((b) => !b.cancelled).map((b) => ({ start: b.startTime, end: b.endTime, what: b.courseId, where: b.room ?? null })),
+    )
+    const extra = dated
+      .filter((c) => !removesChange(c.kind))
+      .map((c) => ({ start: c.startTime, end: c.endTime, what: c.courseId, where: c.room ?? null }))
+    return [...regular, ...extra]
+      .reduce(
+        (seen, c) => (seen.some((x) => x.start === c.start && x.what === c.what) ? seen : [...seen, c]),
+        [] as { start: string; end: string; what: string; where: string | null }[],
+      )
+      .sort((a, b) => a.start.localeCompare(b.start))
+  }
 
-  const current = classesToday.find((c) => mins >= at(c.start) && mins < at(c.end))
-  const next = classesToday.find((c) => at(c.start) > mins)
+  const todays = classesOn(today)
+  const current = todays.find((c) => mins >= at(c.start) && mins < at(c.end))
+  const next = todays.find((c) => at(c.start) > mins)
+
+  // Nothing left today: look ahead for the next class there is.
+  let ahead: { date: string; klass: (typeof todays)[number] } | null = null
+  if (!current && !next)
+    for (let i = 1; i <= 7 && !ahead; i++) {
+      const date = addDays(today, i)
+      const first = classesOn(date)[0]
+      if (first) ahead = { date, klass: first }
+    }
+
   const until = next ? at(next.start) - mins : 0
-  const label = until >= 60 ? `in ${Math.floor(until / 60)} h ${until % 60} min` : `in ${until} min`
+  const countdown = until >= 60 ? `in ${Math.floor(until / 60)} h ${until % 60} min` : `in ${until} min`
+  const when = current ? 'In class now' : next ? 'Up next' : ahead ? 'Next class' : 'Nothing scheduled'
+  const what = current?.what ?? next?.what ?? ahead?.klass.what ?? 'Enjoy the break'
+  const where = current
+    ? `until ${current.end}${current.where ? ` · ${current.where}` : ''}`
+    : next
+      ? `${next.start}–${next.end}${next.where ? ` · ${next.where}` : ''}`
+      : ahead
+        ? `${formatDate(ahead.date)} · ${ahead.klass.start}–${ahead.klass.end}${ahead.klass.where ? ` · ${ahead.klass.where}` : ''}`
+        : 'No classes on your timetable in the next week'
 
-  if (!day) return null
   return (
     <section className={`up-next${current || next ? '' : ' is-free'}`}>
       <div className="up-next-main">
-        <div className="when">{current ? 'In class now' : next ? 'Up next' : 'Today'}</div>
-        <div className="what">
-          {current ? current.what : next ? next.what : classesToday.length ? "That's your day" : 'Nothing scheduled'}
-        </div>
-        <div className="where">
-          {current
-            ? `until ${current.end}${current.where ? ` · ${current.where}` : ''}`
-            : next
-              ? `${next.start}–${next.end}${next.where ? ` · ${next.where}` : ''}`
-              : classesToday.length
-                ? `${classesToday.length} class(es) done`
-                : 'No classes on your timetable today'}
-        </div>
+        <div className="when">{when}</div>
+        <div className="what">{what}</div>
+        <div className="where">{where}</div>
       </div>
-      {!current && next && <div className="countdown">{label}</div>}
+      {!current && next && <div className="countdown">{countdown}</div>}
     </section>
   )
 }

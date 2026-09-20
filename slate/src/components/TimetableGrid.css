@@ -5,8 +5,8 @@
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
-  min-width: calc(74px + 10 * 140px);
-  font-size: 13.5px;
+  min-width: calc(88px + 10 * 150px);
+  font-size: 14.5px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -24,13 +24,13 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--bg-subtle);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  padding: 9px 6px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--rule);
   white-space: nowrap;
 }
@@ -42,17 +42,17 @@
 }
 
 .timetable-grid .day-col {
-  width: 74px;
+  width: 88px;
 }
 
 .hour-label {
   vertical-align: top;
-  padding: 10px 8px;
-  background: var(--bg-subtle);
+  padding: 14px 10px;
+  background: var(--bg);
   border-right: 1px solid var(--rule);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg-subtle);
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-h);
@@ -67,30 +67,25 @@
 
 .day-lanes {
   padding: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg-subtle);
 }
 
 .day-grid {
   position: relative;
   display: grid;
-  min-height: 46px;
+  min-height: 66px;
 }
 
+/* Empty time stays empty: hairline columns, no fill. */
 .hour-bg {
   border-right: 1px solid var(--bg-subtle);
-  min-height: 46px;
+  min-height: 66px;
   background: var(--bg);
 }
 
-/* A free hour, when the screen is about finding one. */
+/* Only where the screen's job is finding a free hour. */
 .hour-bg.free {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--free-bg),
-    var(--free-bg) 5px,
-    transparent 5px,
-    transparent 11px
-  );
+  background: var(--free-bg);
   box-shadow: inset 0 0 0 1px var(--accent-border);
 }
 
@@ -152,10 +147,11 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  margin: 4px 5px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
+  margin: 5px 6px;
+  padding: 8px 11px;
+  border-radius: 8px;
   border-left: 3px solid var(--border);
+  justify-content: center;
   animation: slot-in 0.3s ease both;
 }
 
@@ -194,7 +190,7 @@
 .slot-item .course {
   font-family: var(--display);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14.5px;
   letter-spacing: -0.01em;
 }
 
@@ -205,14 +201,14 @@
 
 .section-label {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   opacity: 0.85;
 }
 
 .slot-item .meta.room {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
   white-space: nowrap;
 }

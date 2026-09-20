@@ -53,7 +53,7 @@ function candidates(n: number, dates: string[], earliest: string, latest: string
   const out: Candidate[] = []
   for (const date of dates) {
     const day = weekdayOf(date)
-    if (day === 'SAT' || day === 'SUN') continue
+    if (day === 'SUN') continue
     for (let i = 0; i + n <= HOURS.length; i++) {
       const hours = Array.from({ length: n }, (_, k) => i + k)
       if (hours.some((h, k) => k > 0 && HOURS[h].start !== HOURS[h - 1].end)) continue

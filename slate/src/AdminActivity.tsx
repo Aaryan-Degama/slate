@@ -23,7 +23,7 @@ export default function AdminActivity() {
   // This week and next only; older changes are deleted by the table's TTL.
   const actions = useMemo(() => {
     const monday = mondayOf(todayIst())
-    return rows ? toActions(rows).filter((a) => a.date >= monday && a.date <= addDays(monday, 11)) : []
+    return rows ? toActions(rows).filter((a) => a.date >= monday && a.date <= addDays(monday, 12)) : []
   }, [rows])
   const batches = useMemo(() => [...new Set(actions.map((a) => a.batch))].sort(), [actions])
 

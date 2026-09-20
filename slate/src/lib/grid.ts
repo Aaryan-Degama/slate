@@ -2,7 +2,9 @@
 // (read off the actual timetable spreadsheet during ingestion — not
 // arbitrary hour boundaries). Lunch (13:00-14:30) is intentionally
 // excluded: it's never a candidate slot.
-export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'] as const;
+// Saturday is shown too: normally empty, but makeup and compensatory
+// classes land there, and a CR can schedule one.
+export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
 export type Day = (typeof DAYS)[number];
 
 export const HOURS: { start: string; end: string }[] = [
@@ -99,9 +101,9 @@ export function formatDate(date: string): string {
 
 /** The live changes that fall in the week starting `monday`, with their weekday set. */
 export function forWeek(changes: ChangeEntry[], monday: string): ChangeEntry[] {
-  const friday = addDays(monday, 4);
+  const saturday = addDays(monday, 5);
   return changes
-    .filter((c) => !c.undoneAt && c.date >= monday && c.date <= friday)
+    .filter((c) => !c.undoneAt && c.date >= monday && c.date <= saturday)
     .map((c) => ({ ...c, day: weekdayOf(c.date) }));
 }
 
