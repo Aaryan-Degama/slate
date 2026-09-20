@@ -83,8 +83,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #dbf1e4;
-  color: #14613f;
+  background: #dbf1f1;
+  color: #145f61;
   font-size: 12px;
   font-weight: 700;
 }
@@ -92,7 +92,7 @@
 .logout {
   border: 0;
   background: none;
-  color: #b7d3c7;
+  color: var(--sidebar-text-muted);
   padding: 5px 0;
   font-size: 12px;
 }
@@ -150,10 +150,10 @@ label {
 input,
 select {
   padding: 11px 12px;
-  border: 1px solid #d7e1dc;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #fff;
-  color: #1d2d28;
+  color: var(--text-h);
   outline: none;
 }
 
@@ -181,7 +181,7 @@ button[type='submit'],
   border: 0;
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 4px rgba(18, 97, 67, 0.2);
+  box-shadow: 0 2px 4px rgba(17, 106, 108, 0.2);
 }
 
 button[type='submit']:hover,
@@ -204,7 +204,7 @@ button:disabled {
 }
 
 fieldset {
-  border: 1px solid #deE7e2;
+  border: 1px solid var(--border);
   border-radius: 7px;
   padding: 14px 16px;
   display: flex;

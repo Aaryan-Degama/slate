@@ -91,33 +91,33 @@ const amplifyTheme: Theme = {
         router: {
           borderColor: { value: '#e3ebe7' },
           borderWidth: { value: '1px' },
-          boxShadow: { value: '0 4px 17px rgba(23, 60, 48, 0.06)' },
+          boxShadow: { value: '0 4px 17px rgba(23, 59, 60, 0.06)' },
         },
       },
       button: {
         primary: {
-          backgroundColor: { value: '#187c55' },
-          _hover: { backgroundColor: { value: '#116c48' } },
-          _focus: { backgroundColor: { value: '#116c48' } },
-          _active: { backgroundColor: { value: '#116c48' } },
+          backgroundColor: { value: '#048a8d' },
+          _hover: { backgroundColor: { value: '#116a6c' } },
+          _focus: { backgroundColor: { value: '#116a6c' } },
+          _active: { backgroundColor: { value: '#116a6c' } },
         },
         link: {
-          color: { value: '#187c55' },
-          _hover: { color: { value: '#116c48' } },
+          color: { value: '#048a8d' },
+          _hover: { color: { value: '#116a6c' } },
         },
       },
       tabs: {
         item: {
           _active: {
-            color: { value: '#187c55' },
-            borderColor: { value: '#187c55' },
+            color: { value: '#048a8d' },
+            borderColor: { value: '#048a8d' },
           },
         },
       },
       fieldcontrol: {
         _focus: {
-          borderColor: { value: '#299265' },
-          boxShadow: { value: '0 0 0 3px #d9f2e4' },
+          borderColor: { value: '#299295' },
+          boxShadow: { value: '0 0 0 3px #d9f2f2' },
         },
       },
     },
