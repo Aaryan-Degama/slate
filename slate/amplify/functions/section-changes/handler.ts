@@ -293,6 +293,7 @@ export const handler = async (event: Event) => {
             const prefix = r.rollPrefix ? String(r.rollPrefix) : `I${String(r.branch).toUpperCase()}`
             return {
               id: `${prefix}${r.admissionYear}${String(r.rollNumber).padStart(3, '0')}`,
+              name: r.name ?? null,
               subSection: r.subSection ?? (String(r.section).length === 2 ? r.section : null),
             }
           })
@@ -303,7 +304,7 @@ export const handler = async (event: Event) => {
           .map((r) => ({ section: r.section, admissionYear: r.admissionYear, minRoll: r.minRoll, maxRoll: r.maxRoll })),
       }
     })
-    return JSON.stringify({ ...batch, me: `${me.section}${me.subSection ? ` (${me.subSection})` : ''}`, sections })
+    return JSON.stringify({ ...batch, me: `${me.section}${me.subSection ? ` (${me.subSection})` : ''}`, meRollId: me.rollId, sections })
   }
 
   const ctx = await context(event.identity)

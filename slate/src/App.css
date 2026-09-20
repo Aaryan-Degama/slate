@@ -543,30 +543,6 @@ button.danger {
   background: var(--free-bg);
 }
 
-.roster {
-  flex: 1 1 100%;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.roster .roll {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.roster .roll.me {
-  border-color: var(--free);
-  background: var(--free-bg);
-  font-weight: 600;
-}
-
-.roster .roll.cr {
-  border-color: var(--text-h);
-}
-
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -590,4 +566,8 @@ button.danger {
   top: 0;
   z-index: 1;
   background: var(--bg-subtle);
+}
+
+table.admin-table tr.me {
+  background: var(--free-bg);
 }

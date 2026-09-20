@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../amplify/data/resource'
 import { listAll } from './lib/listAll'
+import StudentTable, { buildStudentRows } from './components/StudentTable'
 
 const client = generateClient<Schema>()
 
@@ -271,170 +272,18 @@ export default function AdminStudents() {
             {error && <p className="error">{error}</p>}
           </div>
 
-          <StudentTable batch={batch} students={mine} ranges={myRanges} lastUpdate={lastUpdate} />
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <h2>Students</h2>
+            <p className="subtitle">
+              {mine.length} from uploaded lists, the rest matched by roll range
+              {lastUpdate ? ` · list last updated ${new Date(lastUpdate).toLocaleString()}` : ''}
+            </p>
+            <StudentTable
+              rows={buildStudentRows(mine, myRanges, batch.branch)}
+              fileName={`${batch.program}-${batch.branch}-sem${batch.semester}-students`}
+            />
+          </div>
         </>
-      )}
-    </div>
-  )
-}
-
-type TableRow = {
-  rollId: string
-  name: string
-  admissionYear: string
-  rollNumber: number
-  section: string
-  subSection: string
-  source: 'list' | 'range'
-}
-type SortKey = keyof Omit<TableRow, 'source'> | 'source'
-
-/** The batch's students as a sheet: one row each, sortable and filterable.
- * Students from uploaded lists are exact; the rest are filled in from the
- * batch's roll ranges, which is how the app places them. */
-function StudentTable({
-  batch,
-  students,
-  ranges,
-  lastUpdate,
-}: {
-  batch: Batch
-  students: StudentRow[]
-  ranges: RangeRow[]
-  lastUpdate?: string
-}) {
-  const [q, setQ] = useState('')
-  const [section, setSection] = useState('')
-  const [source, setSource] = useState<'' | 'list' | 'range'>('')
-  // Alphabetical by name; students with no name yet (roll ranges, older
-  // uploads) fall to the end rather than to the top.
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 })
-
-  const rows = useMemo(() => {
-    const out: TableRow[] = students.map((s) => ({
-      rollId: `${s.rollPrefix || `I${s.branch.toUpperCase()}`}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`,
-      name: s.name ?? '',
-      admissionYear: s.admissionYear,
-      rollNumber: s.rollNumber,
-      section: s.section[0],
-      subSection: s.subSection ?? (isSub(s.section) ? s.section : ''),
-      source: 'list',
-    }))
-    // Keyed by the full roll id: numbering restarts per prefix, so
-    // IIB2024001 must not hide IIT2024001 from a roll range.
-    const listed = new Set(out.map((r) => r.rollId))
-    const prefix = `I${batch.branch.toUpperCase()}`
-    // Everyone a range covers but no list names: that's who the app matches by range.
-    for (const r of ranges.filter((r) => !isSub(r.section)))
-      for (let n = r.minRoll; n <= r.maxRoll; n++) {
-        if (listed.has(`${prefix}${r.admissionYear}${String(n).padStart(3, '0')}`)) continue
-        const sub = ranges.find((x) => isSub(x.section) && x.section[0] === r.section && x.admissionYear === r.admissionYear && n >= x.minRoll && n <= x.maxRoll)
-        out.push({
-          name: '',
-          rollId: `${prefix}${r.admissionYear}${String(n).padStart(3, '0')}`,
-          admissionYear: r.admissionYear,
-          rollNumber: n,
-          section: r.section,
-          subSection: sub?.section ?? '',
-          source: 'range',
-        })
-      }
-    return out
-  }, [students, ranges, batch])
-
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    const filtered = rows.filter(
-      (r) =>
-        (!needle || r.rollId.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle) || String(r.rollNumber).includes(needle)) &&
-        (!section || r.section === section) &&
-        (!source || r.source === source),
-    )
-    const { key, dir } = sort
-    return [...filtered].sort((a, b) => {
-      const x = a[key]
-      const y = b[key]
-      if (key === 'name' && !x !== !y) return x ? -1 : 1
-      return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * dir
-    })
-  }, [rows, q, section, source, sort])
-
-  const sections = [...new Set(rows.map((r) => r.section))].sort()
-  const header = (key: SortKey, label: string) => (
-    <th
-      onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === 1 ? -1 : 1 }))}
-      style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
-    >
-      {label} {sort.key === key ? (sort.dir === 1 ? '▲' : '▼') : ''}
-    </th>
-  )
-  const csv = () => {
-    const text = [
-      'name,roll,year,number,section,subSection,source',
-      ...shown.map((r) => [`"${r.name.replace(/"/g, '""')}"`, r.rollId, r.admissionYear, r.rollNumber, r.section, r.subSection, r.source].join(',')),
-    ].join('\n')
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${batch.program}-${batch.branch}-sem${batch.semester}-students.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2>Students · {rows.length}</h2>
-      <p className="subtitle">
-        {students.length} from uploaded lists, {rows.length - students.length} matched by roll range
-        {lastUpdate ? ` · list last updated ${new Date(lastUpdate).toLocaleString()}` : ''}
-      </p>
-      <div className="filter-bar">
-        <input placeholder="Search name or roll" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select value={section} onChange={(e) => setSection(e.target.value)}>
-          <option value="">All sections</option>
-          {sections.map((s) => (
-            <option key={s} value={s}>
-              Section {s}
-            </option>
-          ))}
-        </select>
-        <select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
-          <option value="">List and ranges</option>
-          <option value="list">Uploaded list only</option>
-          <option value="range">Roll range only</option>
-        </select>
-        <span className="meta">{shown.length} shown</span>
-        <button type="button" onClick={csv} disabled={!shown.length}>
-          Download CSV
-        </button>
-      </div>
-      {shown.length === 0 ? (
-        <p className="meta">No students match.</p>
-      ) : (
-        <div className="table-scroll">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                {header('name', 'Name')}
-                {header('rollId', 'Roll')}
-                {header('admissionYear', 'Year')}
-                {header('section', 'Section')}
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((r, i) => (
-                <tr key={`${r.admissionYear}-${r.rollNumber}`}>
-                  <td className="meta">{i + 1}</td>
-                  <td>{r.name || <span className="meta">—</span>}</td>
-                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r.rollId}</td>
-                  <td>{r.admissionYear}</td>
-                  <td>{r.subSection || r.section}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </div>
   )

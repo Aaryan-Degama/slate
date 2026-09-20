@@ -213,7 +213,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
           markSeen={markChangesSeen}
         />
       )}
-      {studentTab === 'batch' && <MyBatch email={profile.email} />}
+      {studentTab === 'batch' && <MyBatch />}
       {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
     </AppShell>
   )
