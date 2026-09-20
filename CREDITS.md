@@ -29,11 +29,10 @@ Everything Slate uses that we didn't write during the event.
 | oxlint | 1.83.0 | MIT |
 | http-proxy-agent, https-proxy-agent (local development behind a proxy only) | 9.1.0 | MIT |
 
-## Libraries (Python, offline scripts in `slate/scripts/`)
+## Libraries (Python, `slate/scripts/bedrock-normalize-timetable.py`)
 
 | Package | License |
 |---|---|
-| openpyxl | MIT |
 | boto3 | Apache-2.0 |
 
 ## Fonts

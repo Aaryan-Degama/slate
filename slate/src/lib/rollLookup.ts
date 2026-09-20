@@ -42,10 +42,12 @@ export type BatchRoster = {
   semester: number
   /** e.g. "C" or "B (B1)" */
   me: string
+  /** The signed-in student's own roll id, e.g. "IIT2024245". */
+  meRollId: string
   sections: {
     section: string
     cr: { email: string; since: string } | null
-    students: { id: string; subSection: string | null }[]
+    students: { id: string; name: string | null; subSection: string | null }[]
     ranges: { section: string; admissionYear: string; minRoll: number; maxRoll: number }[]
   }[]
 }
