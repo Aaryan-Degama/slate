@@ -15,7 +15,14 @@ const PLAIN_RE = /^\s*([A-Za-z][A-Za-z0-9.&-]*)\s*\(\s*([LTP])\s*\)\s*(.*)$/
 //   EBE (CC3-5255)
 // Everyone in the batch may take them; who actually attends comes from
 // their registrations (docs/DATA-MODEL.md).
-const BASKET_RE = /^\s*(?:(MDM-\d+)\s+)?([A-Za-z][A-Za-z0-9.&-]*)\s*\(\s*([A-Za-z]{1,3}[\d-]{2,}[^)]*)\)\s*$/
+// Sheets write these several ways, all meaning "this course meets here":
+//   MDM-3 EF (CC3-5107)        a minor-degree slot
+//   EBE (CC3-5255)             an elective
+//   IF Sec(A) (CC3- 5106)      an HSS course with its own groups
+//   Advance Data Analytics (CC2-4105)   spelled out instead of coded
+const BASKET_RE = /^\s*(?:(?:MDM-\d+|HSMC|OPEN ELECTIVE)\s+)?([A-Za-z][A-Za-z0-9.&' -]*?)\s*(?:(?:Sec\s*)?\(([A-Z]\d?)\)\s*)?\(\s*([^)]*\d[^)]*)\)\s*$/
+// A room written without brackets: "TTRP (L) -2121", "DDM (L) -LT-3113".
+const BARE_ROOM_RE = /^[-\s]*([A-Za-z]{0,3}\s*-?\s*\d{3,4})\s*$/
 const LTPS_RE = /^\s*\d+(?:\.\d+)?\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*$/
 const CODE_RE = /^[A-Za-z][A-Za-z0-9-]{0,11}$/
 const CATEGORY_RE = /^(PCC|PEC|OEC|BSC|ESC|HSMC|MDM|AEC|VAC|SEC|PC|PE|OE)\b/i
@@ -28,7 +35,8 @@ const WHOLE_BATCH_LABEL = /^(all|both|IT-BI|BI-IT)$/i
 
 /** "CC-3, 5254" / "(CC3- 5207)" / "CC-3 5154" -> "CC3-5254"; a bare "5118" stays as is. */
 function normRoom(raw: string): string | null | undefined {
-  const t = raw.replace(/[()]/g, ' ').trim()
+  // Sheets break rooms across a space: "CC3- 5155", "LT- 3112".
+  const t = raw.replace(/[()]/g, ' ').replace(/(-)\s+/g, '$1').replace(/\s+(-)/g, '$1').trim()
   if (!t) return null
   const cc = /^CC\s*-?\s*(\d)\s*[-,]?\s*(\d{3,4})$/i.exec(t)
   if (cc) return `CC${cc[1]}-${cc[2]}`
@@ -338,13 +346,13 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
         // the whole batch; anything else the list knows is an elective --
         // also whole-batch here, but only its enrolled students attend it.
         ;[, code, kind] = p as unknown as [string, string, string]
+        // Not in the course list: keep it as an elective-style class for
+        // the batch rather than dropping it -- who attends comes from
+        // registrations (docs/DATA-MODEL.md).
         const info = sheet.legend[code.trim()]
-        if (!info) {
-          skip('no section, and not in the course list')
-          continue
-        }
-        elective = !info.core
-        const r = normRoom(p[3])
+        elective = !info?.core
+        const bare = BARE_ROOM_RE.exec(p[3])
+        const r = normRoom(bare ? bare[1] : p[3])
         if (r === undefined) {
           skip(`couldn't read the room "${p[3].trim()}"`)
           continue
@@ -353,14 +361,16 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
         sections = [WHOLE_BATCH]
       } else {
         const bas = BASKET_RE.exec(line)
-        if (!bas) {
-          skip('not in a "CODE (L/T/P) ..." form')
+        const r = bas ? normRoom(bas[3]) : undefined
+        if (!bas || r === undefined) {
+          skip(bas ? `couldn't read the room "${bas[3]}"` : 'not in a "CODE (L/T/P) ..." form')
           continue
         }
-        // "MDM-3 EF (CC3-5107)": an elective/minor class for the batch.
-        code = bas[2]
+        // An elective / minor / HSS class: the batch may take it, and who
+        // actually attends comes from registrations (docs/DATA-MODEL.md).
+        code = bas[1].trim()
         kind = 'L'
-        room = bas[3].replace(/\s+/g, '')
+        room = r
         sections = [WHOLE_BATCH]
         elective = true
       }

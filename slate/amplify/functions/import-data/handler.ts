@@ -322,7 +322,15 @@ export const handler = async (event: Event) => {
       return [{ line: i + 1, rollId, course, faculty: facultyC < 0 ? '' : (row[facultyC] ?? '').trim() }]
     })
 
-    const [students, offerings, existing] = await Promise.all([scanAll(SS), scanAll(OF), scanAll(RG)])
+    const [students, offerings, existing, courses] = await Promise.all([scanAll(SS), scanAll(OF), scanAll(RG), scanAll(CO)])
+    // A shared course is named in one department's sheet and only coded in
+    // another's; either name can identify it.
+    const nameByCode = new Map<string, string>()
+    for (const c of [...courses, ...offerings]) {
+      const code = String(c.code ?? c.courseCode ?? '')
+      const name = String(c.name ?? c.courseName ?? '')
+      if (code && name && !/^program elective/i.test(name) && !nameByCode.has(code)) nameByCode.set(code, name)
+    }
     const rollOf = (s: Item) =>
       `${s.rollPrefix ? String(s.rollPrefix) : `I${String(s.branch).toUpperCase()}`}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`
     const studentBy = new Map(students.map((s) => [rollOf(s), s]))
@@ -345,9 +353,9 @@ export const handler = async (event: Event) => {
       // courses elsewhere -- a backlog course with a junior batch, a minor
       // or an open elective (docs/DATA-MODEL.md).
       const mine = byBatch.get(`${student.program}|${student.branch}|${Number(student.semester)}`) ?? []
-      let m = matchOffering(reg, mine)
+      let m = matchOffering(reg, mine, nameByCode)
       if (!m.offeringKey) {
-        const elsewhere = matchOffering(reg, offerings)
+        const elsewhere = matchOffering(reg, offerings, nameByCode)
         if (elsewhere.offeringKey) m = elsewhere
       }
       if (!m.offeringKey) {

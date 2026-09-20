@@ -41,12 +41,16 @@ export const sameCourseName = (a: string, b: string) => {
 
 export type Match = { offeringKey?: string; reason?: string }
 
-/** Which offering of this batch is this registration row? */
-export function matchOffering(reg: RegRow, offerings: Row[]): Match {
+/** Which offering of this batch is this registration row?
+ * `nameByCode` carries course names learned from any sheet, because one
+ * department's timetable names a shared course ("IF" = Introduction to
+ * Finance) while another's lists only the code. */
+export function matchOffering(reg: RegRow, offerings: Row[], nameByCode: Map<string, string> = new Map()): Match {
+  const nameOf = (o: Row) => String(o.courseName ?? nameByCode.get(String(o.courseCode)) ?? '')
   const byFaculty = reg.faculty ? offerings.filter((o) => o.faculty && sameFaculty(String(o.faculty), reg.faculty)) : []
   if (byFaculty.length === 1) return { offeringKey: String(byFaculty[0].offeringKey) }
 
-  const byName = offerings.filter((o) => o.courseName && sameCourseName(String(o.courseName), reg.course))
+  const byName = offerings.filter((o) => nameOf(o) && sameCourseName(nameOf(o), reg.course))
   if (byName.length === 1) return { offeringKey: String(byName[0].offeringKey) }
 
   // Both narrow it down: the professor's offering of that course.
