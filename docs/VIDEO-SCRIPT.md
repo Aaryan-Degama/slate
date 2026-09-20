@@ -1,115 +1,125 @@
-# Demo video — 3:00 hard limit
+# Demo video — 3:00 hard limit, three voices
 
-Live narration while you click. Lines are written to be *said*, not read out — keep your own words, keep the order. Pacing assumes you pause where marked; the timings have ~10 seconds of slack for pages loading.
+Live narration while you click. Each person owns a stretch of the story and one screen, so nobody hands the mouse over mid-sentence. Say the lines in your own words; keep the order and the handoffs.
 
-**Rules this is shaped around:** 3 minutes maximum, AWS must be visible *in use*, and a feature not in the video doesn't exist. So: the most time goes to the two things nobody else can show — **a real student's cross-batch week** and **a live Cedar decision in CloudWatch**.
+**Shaped by the rules:** 3 minutes maximum, AWS must be visible *in use*, and a feature not in the video doesn't exist. Time goes to the two things nobody else can show — **a real student's cross-batch week** and **a live Cedar decision in CloudWatch**.
+
+| Who | Owns | Time |
+|---|---|---|
+| **Jalendu** | The problem and a student's week | 0:00–0:55 |
+| **Degama** | The CR making a change, and it landing | 0:55–1:50 |
+| **Kavyan** | Authorization, ingestion, architecture, learnings | 1:50–3:00 |
 
 ---
 
-## Before you hit record
+## Before recording
 
-- **Three browser windows, already signed in**, so no login waits:
-  1. `iit2024245@iiita.ac.in` — Sec C student **and CR**
-  2. `iit2024059@iiita.ac.in` — Sec A student (the one with EF and a junior-batch SE)
-  3. `demo-admin@iiita.ac.in` — admin
-  Password: `SlateDemo#2026`
-- **A terminal** with this already typed, not yet run:
+- **Three browser windows, already signed in** (password `SlateDemo#2026`):
+  1. `iit2024059@iiita.ac.in` — student, Sec A → **Jalendu**
+  2. `iit2024245@iiita.ac.in` — student **and CR of Sec C** → **Degama**
+  3. `demo-admin@iiita.ac.in` — admin → **Kavyan**
+- **Terminal** with this typed but not run → **Kavyan**:
   ```bash
   aws logs tail /aws/lambda/amplify-slate-kavyan2-san-sectionchangeslambdaB78D-5jYgBZhyLGrP \
     --since 15m --profile slate --region ap-south-1 | grep cedar
   ```
-- **"What changed" empty** in both student windows — do a clean run first, then undo it.
-- Browser zoom ~110%, no bookmarks bar, notifications off.
+- **"What changed" empty** in both student windows.
+- Zoom ~110%, notifications off, one screen recording with all three windows arranged, or a clean cut per speaker.
+- Do one dry run end to end. The first take is always 40 seconds long.
 
 ---
 
-## 0:00–0:15 · What's broken (keep it short)
+## Jalendu — 0:00–0:55 · The problem, and a real week
 
-**Screen:** the app's sign-in, or a WhatsApp group with names blurred.
+**0:00–0:15 · Screen:** the sign-in page, or a WhatsApp group with names blurred.
 
-> "At my college, a cancelled class reaches you on WhatsApp — if you see it. And if you take an elective with three other sections, no printed timetable even shows your real week. Slate fixes both."
+> "At our college a cancelled class reaches you on WhatsApp — if you see it. And if you take an elective with three other sections, no printed timetable shows your real week. Slate fixes both."
 
-*Don't dwell. The demo is the argument.*
+**0:15–0:55 · Screen:** your window, My Timetable.
 
-## 0:15–0:55 · A real student's real week
+> "This is a real fifth-semester student on real institute data — 1,800 students and 4,800 registrations, loaded from the department's own sheets."
 
-**Screen:** window 2 — `iit2024059`, My Timetable.
-
-> "This is a real fifth-semester IT student, on real institute data — 1,800 students, 4,800 registrations loaded from the department's own sheets."
-
-Point at **Up next**, then the **amber line**:
+*Point at Up next, then the amber line.*
 
 > "Up next tells them what's coming, where, and how long they've got. The amber line is where we are in the day right now."
 
-Open **My courses**:
+*Open My courses.*
 
-> "And these are their actual courses — core courses with their section, Entrepreneurial Finance, which is an elective, and Software Engineering with the *junior* batch, because they're repeating it. A section-based timetable can't show that. Ours is built from who's registered in what."
+> "And these are their actual courses: core ones with their section, Entrepreneurial Finance as an elective, and Software Engineering with the **junior batch**, because they're repeating it. A section-based timetable can't show that — ours is built from who's registered in what."
 
-**AWS on camera (1/3)** — say while the page is up:
+**AWS on camera (1/3)** — say it while the page is up:
 
-> "Sign-in is Cognito, restricted to our institute domain by a Lambda trigger."
+> "Sign-in is Cognito, restricted to our institute's domain by a Lambda trigger."
 
-## 0:55–1:45 · The CR changes something, and it lands
+**Handoff:** "So that's a student. The person who actually changes any of this is the class representative — Degama."
 
-**Screen:** window 1 — `iit2024245`, click Thursday's IML → **Cancel on Thu**.
+## Degama — 0:55–1:50 · The CR changes something, and it lands
 
-> "Every section has a class representative. The professor tells them, they record it here — and it's stamped with their roll number, so nothing is anonymous."
+**Screen:** your window, `iit2024245`.
 
-Now **Make a change → Extra class → pick IML → Find free slots**:
+*Click Thursday's IML → Cancel on that date.*
 
-> "For a makeup class, Slate doesn't check sections. It checks *people*: all 109 students registered in this course, whichever section or batch they're from, plus the professor. Every slot it offers is free for all of them, with the reason written out and a room that's free too."
+> "Every section has a CR. The professor tells them, they record it here — and it's stamped with their roll number, so no change is anonymous."
 
-Tighten the window so nothing fits, search again:
+*Make a change → Extra class → IML → Find free slots.*
 
-> "And when nothing fits, it says who's blocking it and with what. A WhatsApp poll can't do that."
+> "For a makeup class, Slate doesn't check sections — it checks **people**: all 109 students registered in this course, whatever section or batch they're in, plus the professor. Every slot it offers is free for all of them, with the reason written out and a room that's free too."
 
-**Screen:** switch to window 2, refresh.
+*Narrow the window so nothing fits, search again.*
 
-> "Different section, same course — the change is already here, struck through, with the CR's roll number on it. Students not registered in that class see nothing."
+> "And when nothing fits, it names who's blocking it and with what. That's the part a WhatsApp poll can never do."
 
-## 1:45–2:20 · Who's allowed to do that
+*Switch to Jalendu's window and refresh — or have him refresh on camera.*
 
-**Screen:** the terminal. Run the command.
+> "Different section, same course: the change is already here, struck through, with my roll number on it. A student who isn't registered in that class sees nothing."
 
-> "Every change goes through a Cedar policy running in a Lambda. These are the live decisions: allow for the CR, deny for anyone else. The rule is a policy file in the repo, not an if-statement in the UI."
+**Handoff:** "Which raises the obvious question — who's allowed to do that? Kavyan."
 
-**AWS on camera (2/3).** Hold on one `"cedar":"allow"` and one `"cedar":"deny"` line for two full seconds.
+## Kavyan — 1:50–3:00 · Rules, ingestion, architecture, learnings
 
-**Screen:** window 3 — admin → **Upload Data**, drop a timetable sheet, show the review screen.
+**1:50–2:15 · Screen:** the terminal. Run the command.
 
-> "Admins upload the institute's own spreadsheets. They go to S3, a Lambda parses them — merged cells, electives, sub-sections and all — and nothing is written until the admin confirms the diff."
+> "Every change goes through a Cedar policy running in a Lambda. These are the live decisions — allow for the CR, deny for anyone else. The rule is a policy file in the repo, not an if-statement buried in the UI."
+
+**AWS on camera (2/3).** Hold on one `"cedar":"allow"` and one `"cedar":"deny"` for two full seconds.
+
+**2:15–2:35 · Screen:** admin → Upload Data → drop a timetable sheet → the review screen.
+
+> "Admins upload the institute's own spreadsheets. They land in S3, a Lambda parses them — merged cells, electives, sub-sections and all — and nothing is written until the admin confirms the diff."
 
 **AWS on camera (3/3).**
 
-## 2:20–2:40 · How it's built
-
-**Screen:** the README's architecture diagram.
+**2:35–2:50 · Screen:** the architecture diagram in the README.
 
 > "Amplify Hosting, Cognito, AppSync and DynamoDB with TTL on the changes, four Lambdas, S3 for uploads, Cedar for authorization, CloudWatch for the audit trail. Month-to-date cost: zero. It scales to zero between classes."
 
-## 2:40–3:00 · The honest bit
+**2:50–3:00 · Screen:** back to a student's week, then the URL.
 
-**Screen:** back on a student's week.
-
-> "Two things we learned. Real timetables write the same fact a dozen ways — one professor's name is even cut off mid-word — and every notation we didn't handle silently lost a course for a real student. And we changed who this is for halfway through: professors won't log in for this. The CR already does the work, and every section already has one."
-
-End on the live URL.
+> "Two things we learned. Real timetables write the same fact a dozen ways — one professor's name is even cut off mid-word — and every notation we didn't handle silently lost a course for a real student. And we changed who this is for halfway through: professors won't log in for this. The CR already does, and every section already has one."
 
 ---
 
-## Shot checklist
+## Checklist
 
-- [ ] Cognito sign-in mentioned while visible
-- [ ] Up next + amber now-line
-- [ ] My courses showing an elective **and** a junior-batch course
-- [ ] CR cancels a class, roll number visible on the grid
-- [ ] Slot finder: "free for all 109 registered students", reasons, room
-- [ ] No-slot case naming the blocker
-- [ ] The change on a *second* student's screen
-- [ ] CloudWatch: one allow, one deny
-- [ ] Admin upload → S3 → Lambda parse → review
-- [ ] Architecture diagram, live URL
+- [ ] Cognito sign-in mentioned while visible (Jalendu)
+- [ ] Up next + amber now-line (Jalendu)
+- [ ] My courses: an elective **and** a junior-batch course (Jalendu)
+- [ ] CR cancels a class, roll number visible (Degama)
+- [ ] Slot finder: "free for all 109 registered students", reasons, room (Degama)
+- [ ] No-slot case naming the blocker (Degama)
+- [ ] The change on a **second** student's screen (Degama → Jalendu's window)
+- [ ] CloudWatch: one allow, one deny (Kavyan)
+- [ ] Admin upload → S3 → Lambda parse → review (Kavyan)
+- [ ] Architecture diagram + live URL (Kavyan)
 
-## If you're running long
+## If it runs long
 
-Cut in this order: the no-slot case (0:10), the admin upload (0:15, but then say "the sheets are parsed by a Lambda from S3" over the CloudWatch shot), the second learning (0:08). Never cut: the cross-batch week, the change landing on another student's screen, the Cedar deny.
+Cut in this order: the no-slot case (−10s, Degama), the admin upload (−15s, Kavyan — then say "the sheets are parsed by a Lambda from S3" over the CloudWatch shot), the second learning (−8s, Kavyan).
+
+**Never cut:** the cross-batch week, the change landing on another student's screen, the Cedar deny.
+
+## Handoff discipline
+
+- Each speaker ends with the one-line handoff above. It buys the next person two seconds to take over the screen.
+- Don't re-introduce the product; each segment continues the same sentence someone else started.
+- If a page is slow, keep talking about what's about to appear — never narrate the spinner.
