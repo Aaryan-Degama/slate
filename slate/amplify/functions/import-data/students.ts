@@ -27,13 +27,22 @@ export function parseId(value: string): { year?: string; roll?: number; prefix?:
 
 export type Overrides = { section?: string; subSection?: string }
 
+/** One sheet can list every programme of an admission year (IIT, IIB, IEC,
+ * BD*). `onlyPrefixes` says which of them this batch takes. */
+export const prefixesIn = (rows: string[][], col: number | null) =>
+  col === null
+    ? []
+    : [...new Set(rows.map((r) => parseId((r[col] ?? '').trim()).prefix).filter((p): p is string => !!p))].sort()
+
 export function buildStudentRecords(
   rows: string[][],
   mapping: Mapping,
   batchSections: string[],
   yearInput?: string,
   overrides: Overrides = {},
+  onlyPrefixes: string[] = [],
 ): StudentRecord[] {
+  const wanted = onlyPrefixes.map((p) => p.toUpperCase())
   const oSub = overrides.subSection?.trim().toUpperCase() || undefined
   const oSec = overrides.section?.trim().toUpperCase() || oSub?.[0]
   const letters = new Set(batchSections.map((s) => s[0]))
@@ -43,6 +52,9 @@ export function buildStudentRecords(
   const recs = rows.map((row, i): StudentRecord => {
     const fromRoll = parseId(cell(row, mapping.roll))
     const id = fromRoll.roll !== undefined ? fromRoll : parseId(cell(row, mapping.email))
+    // Another programme's student in the same sheet: not this batch's.
+    if (wanted.length && id.prefix && !wanted.includes(id.prefix))
+      return { line: i + 1, year: id.year, roll: id.roll, prefix: id.prefix, problems: ['other-programme'] }
     const problems: string[] = []
     // Sheets mark some names with a trailing "*" (e.g. a hostel/day-scholar
     // flag); it isn't part of the name.
@@ -80,7 +92,8 @@ export function buildStudentRecords(
   const byStudent = new Map<string, StudentRecord[]>()
   for (const r of recs) {
     if (r.roll === undefined || !r.year) continue
-    const k = `${r.year}|${r.roll}`
+    // Prefix included: IIB2024001 and IIT2024001 are two students.
+    const k = `${r.prefix ?? ''}|${r.year}|${r.roll}`
     byStudent.set(k, [...(byStudent.get(k) ?? []), r])
   }
   for (const group of byStudent.values()) {

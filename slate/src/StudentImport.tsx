@@ -34,6 +34,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
   const [subOverride, setSubOverride] = useState('')
   const [check, setCheck] = useState<ImportResult | null>(null)
   const [removeMissing, setRemoveMissing] = useState(false)
+  const [prefixes, setPrefixes] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'checking' | 'applying' | 'applied'>('idle')
   const [error, setError] = useState('')
 
@@ -50,6 +51,24 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
     return [...seen.entries()].sort((a, b) => a[1].semester - b[1].semester)
   }, [slots])
   const batch = batches.find(([k]) => k === batchKey)?.[1]
+
+  // One sheet can list a whole admission year across programmes (IIT, IIB,
+  // IEC, BD...). Default to the ones whose letters match the batch's branch
+  // (IIT for IT); the admin ticks any others that sit in this batch.
+  const sheetPrefixes = useMemo(() => {
+    const col = mapping.roll ?? mapping.email
+    if (col === null) return []
+    const out = new Set<string>()
+    for (const row of sheet.rows) {
+      const m = (row[col] ?? '').trim().match(/^([A-Za-z]{3,4})\d{4}\d+/)
+      if (m) out.add(m[1].toUpperCase())
+    }
+    return [...out].sort()
+  }, [sheet, mapping])
+  useEffect(() => {
+    if (!batch) return
+    setPrefixes(sheetPrefixes.filter((p) => p.slice(1) === batch.branch.toUpperCase()))
+  }, [sheetPrefixes, batch])
 
   const run = async (dryRun: boolean) => {
     if (!batch) return
@@ -68,6 +87,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
         nameCol: mapping.name,
         sectionCol: mapping.section,
         subSectionCol: mapping.subSection,
+        onlyPrefixes: prefixes,
         admissionYear: yearInput || null,
         sectionOverride: secOverride || null,
         subSectionOverride: subOverride || null,
@@ -211,7 +231,28 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
             {status === 'checking' ? 'Checking...' : 'Check and compare'}
           </button>
         )}
-        {error && <p className="error">{error}</p>}
+        {batch && sheetPrefixes.length > 1 && (
+        <div>
+          <p>
+            This sheet lists {sheetPrefixes.length} programmes. Which belong to {batch.program} {batch.branch} Sem{' '}
+            {batch.semester}?
+          </p>
+          <div className="option-list">
+            {sheetPrefixes.map((p) => (
+              <button
+                type="button"
+                key={p}
+                className={prefixes.includes(p) ? 'active' : ''}
+                onClick={() => setPrefixes((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          {prefixes.length === 0 && <p className="error">Pick at least one, or every row will be skipped.</p>}
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
       </div>
 
       {check && (

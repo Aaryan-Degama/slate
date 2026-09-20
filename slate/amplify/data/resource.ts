@@ -260,6 +260,9 @@ const schema = a.schema({
       rollCol: a.integer(),
       emailCol: a.integer(),
       nameCol: a.integer(),
+      // Roll prefixes this batch takes (IIT, IIB...); one sheet can list a
+      // whole admission year across programmes.
+      onlyPrefixes: a.string().array(),
       sectionCol: a.integer(),
       subSectionCol: a.integer(),
       admissionYear: a.string(),
