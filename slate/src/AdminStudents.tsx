@@ -320,15 +320,18 @@ function StudentTable({
       subSection: s.subSection ?? (isSub(s.section) ? s.section : ''),
       source: 'list',
     }))
-    const listed = new Set(out.map((r) => `${r.admissionYear}|${r.rollNumber}`))
+    // Keyed by the full roll id: numbering restarts per prefix, so
+    // IIB2024001 must not hide IIT2024001 from a roll range.
+    const listed = new Set(out.map((r) => r.rollId))
+    const prefix = `I${batch.branch.toUpperCase()}`
     // Everyone a range covers but no list names: that's who the app matches by range.
     for (const r of ranges.filter((r) => !isSub(r.section)))
       for (let n = r.minRoll; n <= r.maxRoll; n++) {
-        if (listed.has(`${r.admissionYear}|${n}`)) continue
+        if (listed.has(`${prefix}${r.admissionYear}${String(n).padStart(3, '0')}`)) continue
         const sub = ranges.find((x) => isSub(x.section) && x.section[0] === r.section && x.admissionYear === r.admissionYear && n >= x.minRoll && n <= x.maxRoll)
         out.push({
           name: '',
-          rollId: `I${batch.branch.toUpperCase()}${r.admissionYear}${String(n).padStart(3, '0')}`,
+          rollId: `${prefix}${r.admissionYear}${String(n).padStart(3, '0')}`,
           admissionYear: r.admissionYear,
           rollNumber: n,
           section: r.section,
