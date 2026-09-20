@@ -211,6 +211,9 @@ function MyTimetable({
     section: m.section,
     sessionType: m.sessionType,
   }))
+  // Registered, but the timetable sheets never say when it meets (the HSS
+  // electives are scheduled outside the departmental sheet).
+  const withoutTimes = me.offerings.filter((o) => !me.meetings.some((m) => m.offeringKey === o.offeringKey))
   const key = sectionKey(section)
   const rep = reps.find((r) => r.sectionKey === key)
   const isCr = rep?.sub === userId
@@ -264,13 +267,37 @@ function MyTimetable({
         My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
         {groups.subSection ?? groups.section}
       </h1>
-      <p className="meta">
-        {me.offerings.length} course(s) you're registered in this term
-        {me.offerings.some((o) => o.kind && o.kind !== 'CORE')
-          ? `, including ${me.offerings.filter((o) => o.kind && o.kind !== 'CORE').map((o) => o.courseCode).join(', ')}`
-          : ''}
-        .
-      </p>
+      <details className="my-courses" open>
+        <summary>
+          My courses ({me.offerings.length})
+          {withoutTimes.length > 0 && ` · ${withoutTimes.length} with no class times yet`}
+        </summary>
+        <ul className="change-history">
+          {[...me.offerings]
+            .sort((x, y) => x.courseCode.localeCompare(y.courseCode))
+            .map((o) => {
+              const times = me.meetings.filter((m) => m.offeringKey === o.offeringKey).length
+              return (
+                <li key={o.offeringKey}>
+                  <span className={`kind ${o.kind && o.kind !== 'CORE' ? 'added' : 'cancelled'}`}>
+                    {(o.kind ?? 'CORE').replace('_', ' ').toLowerCase()}
+                  </span>
+                  <span>
+                    <strong>{o.courseCode}</strong>
+                    {o.courseName ? ` — ${o.courseName}` : ''}
+                    {o.faculty ? ` · ${o.faculty}` : ''}
+                  </span>
+                  <span className="meta">
+                    {times > 0
+                      ? `${times} class(es) a week${o.sections.length ? ` · Sec ${o.sections.join(', ')}` : ''}`
+                      : 'class times not published — ask your CR'}
+                  </span>
+                </li>
+              )
+            })}
+        </ul>
+      </details>
+
       {me.meetings.length === 0 && (
         <p className="error">
           None of your courses has a timetable yet — your registrations are in, but the classes for them haven't been

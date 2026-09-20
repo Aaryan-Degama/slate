@@ -571,3 +571,17 @@ button.danger {
 table.admin-table tr.me {
   background: var(--free-bg);
 }
+
+.my-courses {
+  margin: 0 0 14px;
+}
+
+.my-courses summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.my-courses .kind {
+  text-transform: capitalize;
+}

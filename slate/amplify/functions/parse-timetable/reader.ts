@@ -9,6 +9,13 @@ const ENTRY_RE = /^\s*([A-Za-z][A-Za-z.&]*)\s*\(\s*([LTP])\s*\)\s*-\s*(?:Sec\s*)
 const SECTION_RE = /^[A-Z]\d?$/
 // "DSP (L)", "ESD (P) 5118", "SSD (L) CC-3, 5254", "CE (L) (CC3- 5207)": no section named.
 const PLAIN_RE = /^\s*([A-Za-z][A-Za-z0-9.&-]*)\s*\(\s*([LTP])\s*\)\s*(.*)$/
+// Elective and minor slots are written without a session type, one course
+// per line, sometimes under an "MDM-3" heading (a minor-degree slot):
+//   MDM-3 EF (CC3-5107)
+//   EBE (CC3-5255)
+// Everyone in the batch may take them; who actually attends comes from
+// their registrations (docs/DATA-MODEL.md).
+const BASKET_RE = /^\s*(?:(MDM-\d+)\s+)?([A-Za-z][A-Za-z0-9.&-]*)\s*\(\s*([A-Za-z]{1,3}[\d-]{2,}[^)]*)\)\s*$/
 const LTPS_RE = /^\s*\d+(?:\.\d+)?\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*[-–—]\s*\d+\s*$/
 const CODE_RE = /^[A-Za-z][A-Za-z0-9-]{0,11}$/
 const CATEGORY_RE = /^(PCC|PEC|OEC|BSC|ESC|HSMC|MDM|AEC|VAC|SEC|PC|PE|OE)\b/i
@@ -345,8 +352,17 @@ function mapEntries(sheet: ReturnType<typeof readSheet>) {
         room = r ?? (kind.toUpperCase() === 'P' ? null : sheet.lectureRoom)
         sections = [WHOLE_BATCH]
       } else {
-        skip('not in a "CODE (L/T/P) ..." form')
-        continue
+        const bas = BASKET_RE.exec(line)
+        if (!bas) {
+          skip('not in a "CODE (L/T/P) ..." form')
+          continue
+        }
+        // "MDM-3 EF (CC3-5107)": an elective/minor class for the batch.
+        code = bas[2]
+        kind = 'L'
+        room = bas[3].replace(/\s+/g, '')
+        sections = [WHOLE_BATCH]
+        elective = true
       }
       const first = cell.hours[0]
       const last = cell.hours[cell.hours.length - 1]
