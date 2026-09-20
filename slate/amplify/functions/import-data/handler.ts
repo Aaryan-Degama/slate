@@ -21,6 +21,7 @@ type Args = {
   rollCol?: number | null
   emailCol?: number | null
   nameCol?: number | null
+  onlyPrefixes?: (string | null)[] | null
   sectionCol?: number | null
   subSectionCol?: number | null
   admissionYear?: string | null
@@ -193,10 +194,15 @@ export const handler = async (event: Event) => {
       subSection: a.subSectionCol ?? null,
     }
     const batchSections = [...new Set((await scanAll(TT)).filter(inBatch).map((s) => String(s.section)))]
-    const records = buildStudentRecords(table.rows, mapping, batchSections, a.admissionYear ?? undefined, {
-      section: a.sectionOverride ?? undefined,
-      subSection: a.subSectionOverride ?? undefined,
-    })
+    const records = buildStudentRecords(
+      table.rows,
+      mapping,
+      batchSections,
+      a.admissionYear ?? undefined,
+      { section: a.sectionOverride ?? undefined, subSection: a.subSectionOverride ?? undefined },
+      (a.onlyPrefixes ?? []).filter((p): p is string => !!p),
+    )
+    const otherProgramme = records.filter((r) => r.problems[0] === 'other-programme').length
     // Roll numbers restart per prefix and a batch can mix them (IT Sem 5
     // holds IIT and IIB students), so a student is identified by
     // prefix + year + number. Rows imported before prefixes were kept fall
@@ -205,6 +211,7 @@ export const handler = async (event: Event) => {
     const idOf = (prefix: string | undefined, year: string | undefined, roll: number | undefined) =>
       `${(prefix || fallback).toUpperCase()}|${year}|${roll}`
     const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [idOf(r.prefix, r.year, r.roll), r])).values()]
+    const problems = records.filter((r) => r.problems.length && r.problems[0] !== 'other-programme')
 
     const existing = (await scanAll(SS)).filter(inBatch)
     const byKey = new Map(existing.map((e) => [idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber)), e]))
@@ -260,11 +267,11 @@ export const handler = async (event: Event) => {
         after: String(c.next.subSection ?? c.next.section),
       })),
       changedCount: changed.length,
-      problems: records
-        .filter((r) => r.problems.length)
-        .slice(0, 200)
-        .map((r) => ({ line: r.line, problems: r.problems })),
-      problemCount: records.filter((r) => r.problems.length).length,
+      // Rows from another programme in the same sheet are counted, not
+      // listed as problems: one file holds a whole admission year.
+      otherProgramme,
+      problems: problems.slice(0, 200).map((r) => ({ line: r.line, problems: r.problems })),
+      problemCount: problems.length,
     }
   } else {
     throw new Error(`unknown kind "${a.kind}"`)

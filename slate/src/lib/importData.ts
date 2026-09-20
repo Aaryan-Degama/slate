@@ -13,6 +13,7 @@ export type ImportArgs = {
   rollCol?: number | null
   emailCol?: number | null
   nameCol?: number | null
+  onlyPrefixes?: string[]
   sectionCol?: number | null
   subSectionCol?: number | null
   admissionYear?: string | null
