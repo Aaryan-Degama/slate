@@ -304,7 +304,8 @@ function StudentTable({
   const [q, setQ] = useState('')
   const [section, setSection] = useState('')
   const [source, setSource] = useState<'' | 'list' | 'range'>('')
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rollNumber', dir: 1 })
+  // Alphabetical by roll id, so the prefixes group together (IIB..., IIT...).
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'rollId', dir: 1 })
 
   const rows = useMemo(() => {
     const out: TableRow[] = students.map((s) => ({
