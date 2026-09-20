@@ -5,7 +5,6 @@
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
-  min-width: calc(88px + 10 * 150px);
   font-size: 14.5px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -13,8 +12,9 @@
   overflow: hidden;
 }
 
+/* The week fits the screen on a desktop; only narrow screens scroll. */
 .timetable-wrap {
-  overflow-x: auto;
+  overflow-x: visible;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   margin-bottom: 18px;
@@ -178,9 +178,10 @@
 
 .course-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 6px;
+  gap: 2px 8px;
 }
 
 .course-line-left {
@@ -275,6 +276,16 @@
 
 .change-block.editable {
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .timetable-wrap {
+    overflow-x: auto;
+  }
+
+  .timetable-grid {
+    min-width: calc(74px + 8 * 128px);
+  }
 }
 
 /* --------------------------------------------------------------- tooltip */

@@ -58,18 +58,16 @@ function layoutDay(row: Cell[]): { items: Placed[]; lanes: number } {
 
 /** Where the current time falls across the hour columns, as a percentage
  * of the row's width -- the amber line that says "you are here". */
-function nowAcross(): number | null {
+function nowAcross(hours: typeof HOURS): number | null {
   const now = new Date(Date.now() + 5.5 * 3600e3) // IST
   const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
   const at = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
-  const first = at(HOURS[0].start)
-  const last = at(HOURS[HOURS.length - 1].end)
-  if (mins < first || mins > last) return null
+  if (!hours.length || mins < at(hours[0].start) || mins > at(hours[hours.length - 1].end)) return null
   // Columns are equal width, so position within the column it falls in.
-  const i = HOURS.findIndex((h) => mins >= at(h.start) && mins <= at(h.end))
+  const i = hours.findIndex((h) => mins >= at(h.start) && mins <= at(h.end))
   if (i < 0) return null
-  const share = (mins - at(HOURS[i].start)) / (at(HOURS[i].end) - at(HOURS[i].start))
-  return ((i + share) / HOURS.length) * 100
+  const share = (mins - at(hours[i].start)) / (at(hours[i].end) - at(hours[i].start))
+  return ((i + share) / hours.length) * 100
 }
 
 export default function TimetableGrid({
@@ -98,22 +96,34 @@ export default function TimetableGrid({
   today?: string
 }) {
   const editable = Boolean(onBusyClick || onEmptyClick)
-  const nowAt = today ? nowAcross() : null
-  const nowCol = nowAt === null ? -1 : Math.floor((nowAt / 100) * HOURS.length)
+
+  // Show only the hours the week actually uses (plus any the now-line
+  // needs), so the whole week fits a desktop screen without scrolling --
+  // nobody needs an empty 08:00 column all term.
+  const used = HOURS.map((_, i) => grid.some((row) => row[i] && (row[i].busy.length > 0 || row[i].change)))
+  const first = used.indexOf(true)
+  const last = used.lastIndexOf(true)
+  const from = first < 0 ? 0 : first
+  const to = last < 0 ? HOURS.length - 1 : last
+  const hours = HOURS.slice(from, to + 1)
+  const rows = grid.map((row) => row.slice(from, to + 1))
+
+  const nowAt = today ? nowAcross(hours) : null
+  const nowCol = nowAt === null ? -1 : Math.floor((nowAt / 100) * hours.length)
 
   return (
     <div className="timetable-wrap">
     <table className="timetable-grid">
       <colgroup>
         <col className="day-col" />
-        {HOURS.map((h) => (
+        {hours.map((h) => (
           <col key={h.start} />
         ))}
       </colgroup>
       <thead>
         <tr>
           <th></th>
-          {HOURS.map((hour, i) => (
+          {hours.map((hour, i) => (
             <th key={hour.start} className={i === nowCol ? 'is-now' : undefined}>
               {hour.start}–{hour.end}
             </th>
@@ -122,16 +132,16 @@ export default function TimetableGrid({
       </thead>
       <tbody>
         {DAYS.map((day, di) => {
-          const row = grid[di]
+          const row = rows[di]
           const { items, lanes } = layoutDay(row)
           return (
             <tr key={day} className={day === today ? 'is-today' : undefined}>
               <th className="hour-label">{dayLabels?.[day] ?? day}</th>
-              <td className="day-lanes" colSpan={HOURS.length}>
+              <td className="day-lanes" colSpan={hours.length}>
                 <div
                   className="day-grid"
                   style={{
-                    gridTemplateColumns: `repeat(${HOURS.length}, minmax(0, 1fr))`,
+                    gridTemplateColumns: `repeat(${hours.length}, minmax(0, 1fr))`,
                     gridTemplateRows: `repeat(${lanes}, auto)`,
                   }}
                 >
