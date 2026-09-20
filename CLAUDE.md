@@ -138,35 +138,25 @@ No ML: explainable interval intersection and a bottleneck check, in its own Lamb
 
 ---
 
-## 6. Two things to confirm before building further
+## 6. What was confirmed, and what it changed
 
-1. **This actually happens.** Ask two classmates or a CR: has scheduling a makeup/extra class across sections been a real, recurring headache — not a one-off you happened to notice.
-2. **Room data exists in the real timetables.** Pull one actual AAA timetable PDF and check whether room numbers are present per slot. If not, drop the room-suggestion feature rather than fabricate it.
+Both pre-build checks were answered by real data rather than assumption, and both changed the product:
+
+1. **Does this actually happen?** Yes, and not the way we first framed it. Changes are agreed professor-to-CR and spread by WhatsApp, which is why the CR — not the professor — is the person the tool is for.
+2. **Is room data in the real timetables?** Yes, per class (`CC3-5255`), so the free-room suggestion is real. The same sheets also carry the course legend and the professor per section, which is what makes offerings possible.
+
+A third finding, on day four, mattered more than either: the institute's registration list says who takes what, so a student's week can be exact instead of inferred from their section (see `docs/DATA-MODEL.md`).
 
 ---
 
-## 7. Build order
+## 7. How it was built
 
-**Day 1 (remainder of today)**
-- Repo init, first commit, push. Clone the Amplify Vite/React template.
-- Cognito with the IIITA domain gate and the `role` attribute. Deploy. Public URL exists by end of day.
-- Pull 2–3 real AAA timetable PDFs. Run the Textract/Bedrock gate test — this decides whether ingestion is automated or hand-structured for the demo.
-- Do the two confirmations in §6.
-- Hand-structure real timetable data for at least a few sections as a reliable fallback regardless of the gate test result.
+**Day 1** — repo, Amplify template, Cognito with the IIITA domain gate, first deploy. Public URL live.
+**Day 2** — real timetable data ingested from the department's `.xlsx`; the slot-finding Lambda (interval intersection, constraints, ranking, rooms).
+**Day 3** — Cedar authorization; the pivot from faculty-driven scheduling to CRs; dated changes replacing weekly ones.
+**Day 4** — the registration-driven model (courses, offerings, meetings, registrations) from the institute's examinee list; elective, minor and HSS parsing; per-student timetables; the UI pass; submission docs.
 
-**Day 2**
-- `TimetableSlot` schema live with real data (ingested or hand-structured).
-- Slot-finding Lambda: core interval intersection + constraint filtering. Test it by hand against real timetables you can verify yourself.
-
-**Day 3**
-- Room-suggestion pass and the blocking-section explanation.
-- `New Request` and `Proposed Slots` screens wired to the Lambda.
-- `Confirm` screen, Cedar role gate, `ScheduleChange` write wired and reflected live on the Student/Teacher dashboard grids, tested for real.
-
-**Day 4**
-- UI polish — Best UI is a separate ₹1,00,000 prize and most teams ship unstyled forms.
-- Record the video. Write the writeup, including the ingestion honesty point from §3.
-- **Submit by midday, then keep editing until the deadline.**
+What remains open is listed honestly in `WRITEUP.md` and `README.md`.
 
 ---
 
