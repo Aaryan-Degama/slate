@@ -35,6 +35,7 @@ export default function MyBatch() {
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Your Batch</p>
       <h1>
         My Batch — {roster.program} {roster.branch} Sem {roster.semester}
       </h1>

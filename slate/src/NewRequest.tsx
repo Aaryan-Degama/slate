@@ -234,6 +234,7 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
   if (status === 'done' && done) {
     return (
       <div className="new-request">
+        <p className="eyebrow">Done</p>
         <h1>{mode === 'move' ? 'Class moved' : 'Extra class added'}</h1>
         <p>
           {courseId} is on {formatDate(done.date)} {done.start}–{done.end}
@@ -258,6 +259,7 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
     )
     return (
       <div className="new-request">
+        <p className="eyebrow">Proposed Slots</p>
         <h1>{mode === 'move' ? `Move ${courseId}` : `Extra ${courseId} class`}</h1>
         <p className="subtitle">
           Sec {sections.join(', ')}
@@ -314,6 +316,7 @@ export default function NewRequest({ mySection, isCr }: { mySection: MySection |
 
   return (
     <form className="new-request" onSubmit={search}>
+      <p className="eyebrow">Class Rep</p>
       <h1>Make a change</h1>
       <div className="option-list">
         <button type="button" className={mode === 'extra' ? 'active' : ''} onClick={() => setMode('extra')}>

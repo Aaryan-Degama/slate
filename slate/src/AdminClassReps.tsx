@@ -26,6 +26,7 @@ export default function AdminClassReps() {
   const sorted = [...reps].sort((a, b) => a.sectionKey.localeCompare(b.sectionKey))
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Class reps</h1>
       <p>
         Each section's CR claimed the role themselves. Revoking frees the section so another student can claim it; the

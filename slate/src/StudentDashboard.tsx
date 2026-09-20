@@ -130,6 +130,7 @@ function SectionPicker({ onPick }: { onPick: (section: SectionRef) => void }) {
 
   return (
     <div className="identity-link">
+      <p className="eyebrow">One-Time Setup</p>
       <h1>Which section are you in?</h1>
       <p>Not set. Pick your real section — this links your login, it doesn't create any data.</p>
       <div className="option-list">
@@ -301,6 +302,7 @@ function MyTimetable({
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Your Week</p>
       <h1>
         My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
         {groups.subSection ?? groups.section}

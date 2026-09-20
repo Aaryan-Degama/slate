@@ -125,6 +125,7 @@ export default function AdminEnrollments() {
   const sorted = [...rows].sort((a, b) => a.rollId.localeCompare(b.rollId) || a.courseId.localeCompare(b.courseId))
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Enrollments</h1>
       <p>
         By default every student attends their home section's classes. Add exceptions here: a course taken with another

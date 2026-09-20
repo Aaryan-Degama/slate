@@ -99,3 +99,110 @@ code {
   background: var(--code-bg);
   color: var(--text-h);
 }
+
+/* Page-header overline, ported from UniClass's eyebrow labels. */
+.eyebrow {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-heading h2 {
+  margin: 0;
+}
+
+.card-heading p {
+  color: var(--text);
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+/* Sign-in screen: split shell, ported from UniClass's login-shell. */
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 46%);
+}
+
+.login-intro {
+  background: var(--sidebar-bg-alt);
+  color: #f6fbf8;
+  padding: 54px clamp(32px, 8vw, 120px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+}
+
+.login-intro .brand {
+  color: #fff;
+}
+
+.login-intro .brand-mark {
+  background: #58b789;
+  color: #11382f;
+}
+
+.login-intro h1 {
+  color: #fff;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.15;
+  max-width: 540px;
+  margin: 8px 0 18px;
+}
+
+.login-intro .eyebrow {
+  color: #8ad2ad;
+}
+
+.intro-copy {
+  max-width: 460px;
+  line-height: 1.7;
+  color: #c5d9d0;
+  font-size: 16px;
+  margin: 0;
+}
+
+.security-note {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: #d4e6de;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.security-note span {
+  color: #75d8a6;
+  font-size: 24px;
+}
+
+.login-panel {
+  display: grid;
+  place-items: center;
+  padding: 36px;
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 850px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+  .login-intro {
+    min-height: 300px;
+    padding: 32px;
+  }
+  .login-intro h1 {
+    font-size: 32px;
+  }
+}

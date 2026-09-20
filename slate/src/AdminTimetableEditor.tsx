@@ -146,6 +146,7 @@ export default function AdminTimetableEditor() {
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Correct Timetable Data</h1>
       <p className="subtitle">
         One grid per semester, every section's classes together — same layout as the source
