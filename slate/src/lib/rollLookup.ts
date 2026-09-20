@@ -1,14 +1,13 @@
 // Roll-number -> section resolution (CLAUDE.md §4a), from admin-provided
 // data only: the per-student StudentSection list first, then RollRange
-// ranges as a fallback.
+// ranges as a fallback. The student list is admin-only, so the lookup runs
+// on the server (section-changes Lambda, mySection) from the caller's
+// verified email.
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '../../amplify/data/resource'
-import { listAll } from './listAll'
+import type { Attended } from '../../amplify/functions/shared/attendance'
 
 const client = generateClient<Schema>()
-
-// IIITA emails look like iit<admissionYear><rollNumber>@iiita.ac.in.
-const EMAIL_RE = /^([a-z]{2,4})(\d{4})(\d+)@iiita\.ac\.in$/i
 
 export type ResolvedSection = {
   program: string
@@ -17,66 +16,39 @@ export type ResolvedSection = {
   section: string
   /** B1/B2-style group, when the batch splits and it's known. */
   subSection?: string
+  /** Exactly which classes this student attends (home section + enrollment exceptions). */
+  attends?: Attended
 }
 
-type RollRangeRow = {
-  admissionYear: string
+type Query = () => Promise<{ data: unknown; errors?: { message: string }[] }>
+const q = client.queries as unknown as { mySection: Query; batchRoster: Query }
+
+async function run<T>(fn: Query): Promise<T | null> {
+  const res = await fn()
+  if (res.errors?.length) throw new Error(res.errors.map((e) => e.message).join('; '))
+  let payload = res.data
+  while (typeof payload === 'string') payload = JSON.parse(payload)
+  return (payload ?? null) as T | null
+}
+
+/** The signed-in student's section. (`email` is kept for callers; the server uses the verified one.) */
+export async function resolveSectionFromEmail(_email: string): Promise<ResolvedSection | null> {
+  return run<ResolvedSection>(q.mySection)
+}
+
+export type BatchRoster = {
   program: string
   branch: string
   semester: number
-  minRoll: number
-  maxRoll: number
-  section: string
+  /** e.g. "C" or "B (B1)" */
+  me: string
+  sections: {
+    section: string
+    cr: { email: string; since: string } | null
+    students: { id: string; subSection: string | null }[]
+    ranges: { section: string; admissionYear: string; minRoll: number; maxRoll: number }[]
+  }[]
 }
-type StudentSectionRow = {
-  admissionYear: string
-  rollNumber: number
-  program: string
-  branch: string
-  semester: number
-  section: string
-  subSection?: string | null
-}
-const listRollRanges = () => listAll<RollRangeRow>(client.models.RollRange.list)
-const listStudentSections = () => listAll<StudentSectionRow>(client.models.StudentSection.list)
 
-const isSub = (s: string) => /^[A-Z]\d$/i.test(s)
-
-export async function resolveSectionFromEmail(email: string): Promise<ResolvedSection | null> {
-  const match = email.match(EMAIL_RE)
-  if (!match) return null
-  const [, prefix, admissionYear, rollStr] = match
-  const roll = parseInt(rollStr, 10)
-  // Roll numbers restart per branch (IIT2026001 and IEC2026001 both exist),
-  // so the prefix picks the branch: IIT -> IT, IEC -> EC.
-  const branch = prefix.slice(1).toUpperCase()
-  const sameBranch = <T extends { branch: string }>(rows: T[]) => rows.filter((r) => r.branch.toUpperCase() === branch)
-
-  const { data: students } = await listStudentSections()
-  const mine = sameBranch(students)
-    .filter((s) => s.admissionYear === admissionYear && s.rollNumber === roll)
-    .sort((a, b) => b.semester - a.semester)[0]
-  if (mine) {
-    return {
-      program: mine.program,
-      branch: mine.branch,
-      semester: mine.semester,
-      section: mine.section,
-      subSection: mine.subSection ?? undefined,
-    }
-  }
-
-  const { data: ranges } = await listRollRanges()
-  const hits = sameBranch(ranges).filter((r) => r.admissionYear === admissionYear && roll >= r.minRoll && roll <= r.maxRoll)
-  const whole = hits.find((r) => !isSub(r.section))
-  const sub = hits.find((r) => isSub(r.section))
-  const base = whole ?? sub
-  if (!base) return null
-  return {
-    program: base.program,
-    branch: base.branch,
-    semester: base.semester,
-    section: whole ? whole.section : sub!.section[0],
-    subSection: sub?.section,
-  }
-}
+/** Every section of the signed-in student's own batch (never another batch). */
+export const fetchBatchRoster = () => run<BatchRoster>(q.batchRoster)

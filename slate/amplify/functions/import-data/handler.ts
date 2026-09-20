@@ -112,7 +112,9 @@ export const handler = async (event: Event) => {
       throw new Error("This sheet's classes don't name a section. Say which section the batch is (e.g. D).")
     const only = (a.onlySections ?? []).filter((x): x is string => !!x).map((x) => x.trim().toUpperCase())
     const rows = parsed.rows
-      .filter((r) => !only.length || only.includes(r.section === WHOLE_BATCH ? whole! : r.section))
+      // Electives keep section '*' (the whole batch is offered them; who
+      // attends comes from Enrollment), so a section filter never drops them.
+      .filter((r) => r.isElective || !only.length || only.includes(r.section === WHOLE_BATCH ? whole! : r.section))
       .map((r) => ({
       ...batch,
       day: r.day,
@@ -120,9 +122,10 @@ export const handler = async (event: Event) => {
       endTime: r.endTime,
       courseId: r.courseId,
       sessionType: r.sessionType,
-      section: r.section === WHOLE_BATCH ? whole! : r.section,
+      section: r.isElective || r.section !== WHOLE_BATCH ? r.section : whole!,
       room: r.room || undefined,
       faculty: r.faculty,
+      isElective: r.isElective || undefined,
     }))
     const key = (r: Record<string, unknown>) => `${r.day}|${r.courseId}|${r.sessionType ?? ''}|${r.section}|${r.startTime}`
     const existing = (await scanAll(TT)).filter(inBatch)
@@ -132,7 +135,7 @@ export const handler = async (event: Event) => {
     const changed = rows.flatMap((r) => {
       const cur = byKey.get(key(r))
       if (!cur) return []
-      const fields = (['endTime', 'room', 'faculty'] as const).filter((f) => (cur[f] ?? null) !== (r[f] ?? null))
+      const fields = (['endTime', 'room', 'faculty', 'isElective'] as const).filter((f) => (cur[f] ?? null) !== (r[f] ?? null))
       return fields.length ? [{ cur, next: r, fields }] : []
     })
     const removed = existing.filter((e) => !seen.has(key(e)))
@@ -192,26 +195,40 @@ export const handler = async (event: Event) => {
       section: a.sectionOverride ?? undefined,
       subSection: a.subSectionOverride ?? undefined,
     })
-    const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [`${r.year}|${r.roll}`, r])).values()]
+    // Roll numbers restart per prefix and a batch can mix them (IT Sem 5
+    // holds IIT and IIB students), so a student is identified by
+    // prefix + year + number. Rows imported before prefixes were kept fall
+    // back to the batch's branch (IIT for an IT batch).
+    const fallback = `I${batch.branch.toUpperCase()}`
+    const idOf = (prefix: string | undefined, year: string | undefined, roll: number | undefined) =>
+      `${(prefix || fallback).toUpperCase()}|${year}|${roll}`
+    const valid = [...new Map(records.filter((r) => !r.problems.length).map((r) => [idOf(r.prefix, r.year, r.roll), r])).values()]
 
     const existing = (await scanAll(SS)).filter(inBatch)
-    const byKey = new Map(existing.map((e) => [`${e.admissionYear}|${Number(e.rollNumber)}`, e]))
-    const seen = new Set(valid.map((r) => `${r.year}|${r.roll}`))
+    const byKey = new Map(existing.map((e) => [idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber)), e]))
+    const seen = new Set(valid.map((r) => idOf(r.prefix, r.year, r.roll)))
     const setsSub = mapping.subSection !== null
-    const added = valid.filter((r) => !byKey.has(`${r.year}|${r.roll}`))
+    const added = valid.filter((r) => !byKey.has(idOf(r.prefix, r.year, r.roll)))
     const changed = valid.flatMap((r) => {
-      const cur = byKey.get(`${r.year}|${r.roll}`)
+      const cur = byKey.get(idOf(r.prefix, r.year, r.roll))
       if (!cur) return []
       const differs = cur.section !== r.section || (setsSub && (cur.subSection ?? undefined) !== r.subSection)
       return differs ? [{ cur, next: r }] : []
     })
-    const removed = existing.filter((e) => !seen.has(`${e.admissionYear}|${Number(e.rollNumber)}`))
+    const removed = existing.filter((e) => !seen.has(idOf(e.rollPrefix as string | undefined, String(e.admissionYear), Number(e.rollNumber))))
 
     if (!a.dryRun) {
       await batchWrite(
         SS,
         added.map((r) =>
-          newItem('StudentSection', { ...batch, admissionYear: r.year, rollNumber: r.roll, section: r.section, subSection: r.subSection }),
+          newItem('StudentSection', {
+            ...batch,
+            admissionYear: r.year,
+            rollNumber: r.roll,
+            rollPrefix: r.prefix,
+            section: r.section,
+            subSection: r.subSection,
+          }),
         ),
       )
       for (const c of changed)

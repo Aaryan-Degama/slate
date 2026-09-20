@@ -21,7 +21,8 @@ Everything Slate uses that we didn't write during the event.
 | @aws-amplify/ui-react (sign-in screen) | 6.15.6 | Apache-2.0 |
 | @aws-amplify/backend, @aws-amplify/backend-cli | 1.25.0, 1.10.0 | Apache-2.0 |
 | aws-cdk, aws-cdk-lib, constructs | 2.1142.0, 2.268.0, 10.8.1 | Apache-2.0 |
-| @aws-sdk/client-s3, @aws-sdk/client-dynamodb, @aws-sdk/lib-dynamodb | 3.1134.0 | Apache-2.0 |
+| @aws-sdk/client-s3, @aws-sdk/client-dynamodb, @aws-sdk/lib-dynamodb, @aws-sdk/client-cognito-identity-provider | 3.1134.0 | Apache-2.0 |
+| [@cedar-policy/cedar-wasm](https://github.com/cedar-policy/cedar) (Cedar policy engine, evaluates `policy.cedar` in the section-changes Lambda) | 4.13.0 | Apache-2.0 |
 | [exceljs](https://github.com/exceljs/exceljs) (reads .xlsx/.csv, including merged cells, in the Lambdas) | 4.4.0 | MIT |
 | esbuild | 0.28.2 | MIT |
 | tsx | 4.23.13 | MIT |
