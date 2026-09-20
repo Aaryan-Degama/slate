@@ -25,15 +25,9 @@
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
+  display: block;
   height: 28px;
-  border-radius: 8px;
-  background: #58b789;
-  color: #11382f;
-  font-family: var(--serif);
-  font-weight: 700;
+  width: auto;
 }
 
 .top-nav-items {

@@ -37,7 +37,7 @@ function AppShell({
     <div className="app-shell">
       <header className="topbar-nav">
         <div className="brand">
-          <span className="brand-mark">S</span>
+          <img src="/logo.svg" alt="Slate" className="brand-mark" />
           <span>Slate</span>
         </div>
         <nav className="top-nav-items">
@@ -129,7 +129,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
     <div className="login-shell">
       <section className="login-intro">
         <div className="brand">
-          <span className="brand-mark">S</span>
+          <img src="/logo.svg" alt="Slate" className="brand-mark" />
           <span>Slate</span>
         </div>
         <div>
