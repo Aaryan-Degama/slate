@@ -20,8 +20,8 @@ import { addExtra, cancelOccurrence, claimCr, sectionKey, undoChange, type Class
 import { toActions, type Action } from './lib/changes'
 import ActionLine from './components/ActionLine'
 import type { Profile } from './lib/useMyProfile'
-import { resolveSectionFromEmail } from './lib/rollLookup'
-import { touches } from '../amplify/functions/shared/attendance'
+import { fetchMyTimetable, resolveSectionFromEmail, type MyTimetable } from './lib/rollLookup'
+
 import { listAll } from './lib/listAll'
 
 const client = generateClient<Schema>()
@@ -31,10 +31,11 @@ type SectionRef = { program: string; branch: string; section: string; semester: 
 type TimetableSlotRow = BusyEntry & { program: string; branch: string; section: string; semester: number }
 const listTimetableSlots = () => listAll<TimetableSlotRow>(client.models.TimetableSlot.list)
 type ScheduleChangeRow = ChangeEntry & {
-  program: string
-  branch: string
-  section: string
-  semester: number
+  offeringKey?: string | null
+  meetingId?: string | null
+  program?: string | null
+  branch?: string | null
+  semester?: number | null
   createdAt: string
 }
 const listScheduleChanges = () => listAll<ScheduleChangeRow>(client.models.ScheduleChange.list)
@@ -152,12 +153,6 @@ type Panel =
   | { kind: 'class'; entry: BusyEntry; date: string }
   | { kind: 'change'; change: ChangeEntry }
 
-/** B covers B1/B2 (same rule as the server's reach()). */
-function reach(sections: string[]): string[] {
-  const set = new Set(sections)
-  return [...set].filter((s) => !(s.length === 2 && set.has(s[0]))).sort()
-}
-
 function MyTimetable({
   section,
   email,
@@ -168,78 +163,30 @@ function MyTimetable({
   seenAt,
   markSeen,
 }: { section: SectionRef; email: string } & RepProps) {
-  const [data, setData] = useState<{
-    batch: TimetableSlotRow[]
-    /** Home section's classes: what a CR acts on. */
-    home: TimetableSlotRow[]
-    /** The classes this student actually attends (may include other batches). */
-    slots: TimetableSlotRow[]
-    changes: ScheduleChangeRow[]
-    electivesUnconfirmed: boolean
-    irregular: boolean
-  } | null>(null)
+  const [data, setData] = useState<{ me: MyTimetable; changes: ScheduleChangeRow[] } | null>(null)
   const [monday, setMonday] = useState(() => mondayOf(todayIst()))
-  const [groups, setGroups] = useState<{ section: string; subSection?: string; unknownSplit: string[] }>({
-    section: section.section,
-    unknownSplit: [],
-  })
+  const groups = { section: section.section, subSection: section.subSection, unknownSplit: [] as string[] }
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [courseId, setCourseId] = useState('')
+  const [offeringKey, setOfferingKey] = useState('')
   const [room, setRoom] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
 
   const load = useCallback(() => {
-    // The linked profile may predate a B1/B2 upload, so re-resolve the
-    // sub-section on every load. A profile linked by picking "B1" from
-    // the list counts as section B + sub-section B1.
-    const picked = /^[A-Z]\d$/i.test(section.section)
-      ? { section: section.section[0], subSection: section.section }
-      : { section: section.section, subSection: section.subSection }
-    return Promise.all([listTimetableSlots(), listScheduleChanges(), resolveSectionFromEmail(email)])
-      .then(([slots, changes, resolved]) => {
-        const subSection =
-          picked.subSection ??
-          (resolved && resolved.section === picked.section && resolved.semester === section.semester
-            ? resolved.subSection
-            : undefined)
-        const mine = (s: string) => s === picked.section || (subSection !== undefined && s === subSection)
-        const batch = slots.data.filter(
-          (r) => r.program === section.program && r.branch === section.branch && r.semester === section.semester,
-        )
-        const unknownSplit = subSection
-          ? []
-          : [...new Set(batch.map((r) => r.section).filter((s) => s.length === 2 && s[0] === picked.section))].sort()
-        setGroups({ section: picked.section, subSection, unknownSplit })
-        const home = batch.filter((r) => mine(r.section))
-        // The server knows exactly which classes this student attends (home
-        // section + enrollment exceptions). Use it when it's about the
-        // section shown; otherwise (a self-picked section) fall back to it.
-        const att =
-          resolved?.attends && resolved.program === section.program && resolved.branch === section.branch && resolved.semester === section.semester && resolved.section === picked.section
-            ? resolved.attends
-            : null
-        const ids = att ? new Set(att.slotIds) : null
-        setData({
-          batch,
-          home,
-          slots: ids ? slots.data.filter((r) => ids.has(r.id!)) : home,
-          changes: changes.data.filter((r) =>
-            !r.date
-              ? false
-              : att
-                ? touches(r, att)
-                : r.program === section.program && r.branch === section.branch && r.semester === section.semester && mine(r.section),
-          ),
-          electivesUnconfirmed: att?.electivesUnconfirmed ?? false,
-          irregular: att?.irregular ?? false,
-        })
+    // The server knows which offerings this student is registered in and
+    // every meeting of those offerings (docs/DATA-MODEL.md); changes are
+    // matched to the same offerings.
+    return Promise.all([fetchMyTimetable(), listScheduleChanges()])
+      .then(([me, changes]) => {
+        if (!me) return setLoadError("Your roll number isn't in the uploaded student lists yet. Ask your admin.")
+        const mine = new Set(me.offerings.map((o) => o.offeringKey))
+        setData({ me, changes: changes.data.filter((c) => c.date && c.offeringKey && mine.has(c.offeringKey)) })
         setLoadError('')
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)))
-  }, [section, email])
+  }, [])
 
   useEffect(() => {
     load()
@@ -250,22 +197,30 @@ function MyTimetable({
   if (!data || !reps) return <p>Loading your timetable...</p>
 
   const today = todayIst()
+  const me = data.me
+  const busy: BusyEntry[] = me.meetings.map((m) => ({
+    id: m.id,
+    day: m.day,
+    startTime: m.startTime,
+    endTime: m.endTime,
+    courseId: m.courseId,
+    room: m.room,
+    faculty: m.faculty,
+    section: m.section,
+    sessionType: m.sessionType,
+  }))
   const key = sectionKey(section)
   const rep = reps.find((r) => r.sectionKey === key)
   const isCr = rep?.sub === userId
   const week = forWeek(data.changes, monday)
-  const grid = buildGrid(data.slots, week)
+  const grid = buildGrid(busy, week)
   const dayLabels = Object.fromEntries(DAYS.map((d) => [d, formatDate(dateIn(monday, d))]))
 
   // Courses this CR can act for: every course their section takes.
-  const myCourses = [...new Set(data.home.map((r) => r.courseId))].sort()
-  // Sections a change to `course` reaches: the ones taught by the same
-  // professor as this section (same rule as the server).
-  const sectionsOf = (course: string) => {
-    const rows = data.batch.filter((r) => r.courseId === course && r.section !== '*')
-    const profs = new Set(rows.filter((r) => r.section[0] === groups.section && r.faculty).map((r) => r.faculty))
-    return reach(rows.filter((r) => !profs.size || profs.has(r.faculty)).map((r) => r.section))
-  }
+  // A CR acts for the offerings they attend.
+  const myOfferings = [...me.offerings].sort((a, b) => a.courseCode.localeCompare(b.courseCode))
+  const offeringLabel = (o: (typeof me.offerings)[number]) =>
+    `${o.courseCode}${o.faculty ? ` · ${o.faculty}` : ''}${o.sections.length ? ` · Sec ${o.sections.join(', ')}` : ''}`
 
   // Only this week and next matter (older changes are deleted by the
   // table's TTL). One line per action: a change for B and B1, or both
@@ -279,7 +234,7 @@ function MyTimetable({
   const shown = onlyMine ? actions.filter((x) => x.changedBy === email) : actions
 
   const act = async (fn: () => Promise<void>) => {
-    setBusy(true)
+    setWorking(true)
     setError('')
     try {
       await fn()
@@ -289,14 +244,14 @@ function MyTimetable({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
-      setBusy(false)
+      setWorking(false)
     }
   }
   const open = (p: Panel, date: string) => {
     setError('')
     if (date < today) return setError(`${formatDate(date)} has already passed.`)
     setPanel(p)
-    if (p.kind === 'add' && !myCourses.includes(courseId)) setCourseId(myCourses[0] ?? '')
+    if (p.kind === 'add' && !myOfferings.some((o) => o.offeringKey === offeringKey)) setOfferingKey(myOfferings[0]?.offeringKey ?? '')
   }
 
   return (
@@ -305,23 +260,17 @@ function MyTimetable({
         My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
         {groups.subSection ?? groups.section}
       </h1>
-      {groups.unknownSplit.length > 0 && (
+      <p className="meta">
+        {me.offerings.length} course(s) you're registered in this term
+        {me.offerings.some((o) => o.kind && o.kind !== 'CORE')
+          ? `, including ${me.offerings.filter((o) => o.kind && o.kind !== 'CORE').map((o) => o.courseCode).join(', ')}`
+          : ''}
+        .
+      </p>
+      {me.meetings.length === 0 && (
         <p className="error">
-          Section {groups.section} splits into {groups.unknownSplit.join('/')} for some classes, and we don't know
-          your group yet, so those classes aren't shown. Your admin needs to upload the {groups.unknownSplit.join('/')}{' '}
-          list.
-        </p>
-      )}
-      {data.irregular && (
-        <p className="meta">Your timetable includes courses you take outside your section, from your registrations.</p>
-      )}
-      {data.electivesUnconfirmed && (
-        <p className="meta">Showing every elective of your batch: your elective registrations haven't been uploaded yet.</p>
-      )}
-      {data.slots.length === 0 && (
-        <p className="error">
-          No timetable has been ingested for this section yet — the identity link worked
-          correctly, but this particular section's data hasn't been loaded into the system.
+          None of your courses has a timetable yet — your registrations are in, but the classes for them haven't been
+          ingested.
         </p>
       )}
 
@@ -349,7 +298,7 @@ function MyTimetable({
             {shown.map((x) => (
               <ActionLine key={x.groupId} action={x} isNew={isNew(x)}>
                 {isCr && !x.undone && x.date >= today && (
-                  <button type="button" disabled={busy} onClick={() => act(() => undoChange(x.groupId))}>
+                  <button type="button" disabled={working} onClick={() => act(() => undoChange(x.groupId))}>
                     Undo
                   </button>
                 )}
@@ -373,8 +322,8 @@ function MyTimetable({
         ) : (
           <>
             <span>Sec {groups.section} has no CR yet. The CR is the one student who keeps this timetable up to date.</span>
-            <button type="button" className="primary" disabled={busy} onClick={() => act(claimCr)}>
-              {busy ? 'Claiming...' : 'Become CR'}
+            <button type="button" className="primary" disabled={working} onClick={() => act(claimCr)}>
+              {working ? 'Claiming...' : 'Become CR'}
             </button>
           </>
         )}
@@ -395,27 +344,32 @@ function MyTimetable({
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                if (!courseId) return setError('Pick a course.')
+                if (!offeringKey) return setError('Pick a course.')
                 act(() =>
-                  addExtra({ courseId, date: panel.date, startTime: panel.start, endTime: panel.end, room: room.trim() || null }),
+                  addExtra({ offeringKey, date: panel.date, startTime: panel.start, endTime: panel.end, room: room.trim() || null }),
                 )
               }}
             >
               <span>
                 Extra class on <strong>{formatDate(panel.date)} {panel.start}–{panel.end}</strong>
               </span>
-              <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-                {myCourses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+              <select value={offeringKey} onChange={(e) => setOfferingKey(e.target.value)}>
+                {myOfferings.map((o) => (
+                  <option key={o.offeringKey} value={o.offeringKey}>
+                    {o.courseCode}
+                    {o.courseName ? ` — ${o.courseName}` : ''}
                   </option>
                 ))}
               </select>
               <input placeholder="Room (optional)" value={room} onChange={(e) => setRoom(e.target.value)} />
-              <button type="submit" className="primary" disabled={busy || !courseId}>
-                {busy ? 'Adding...' : 'Add extra class'}
+              <button type="submit" className="primary" disabled={working || !offeringKey}>
+                {working ? 'Adding...' : 'Add extra class'}
               </button>
-              {courseId && <span className="meta">For Sec {sectionsOf(courseId).join(', ')}</span>}
+              {offeringKey && (
+                <span className="meta">
+                  For everyone registered in {offeringLabel(myOfferings.find((o) => o.offeringKey === offeringKey)!)}
+                </span>
+              )}
             </form>
           )}
           {panel.kind === 'class' && (
@@ -425,20 +379,20 @@ function MyTimetable({
                 {panel.entry.endTime}
                 {panel.entry.cancelled
                   ? ` · ${KIND_LABEL[panel.entry.cancelled.kind].toLowerCase()} by ${personLabel(panel.entry.cancelled.changedBy)}`
-                  : ` · Sec ${panel.entry.section}`}
+                  : ` · everyone registered in it${panel.entry.section ? ` (Sec ${panel.entry.section})` : ''}`}
               </span>
               {panel.entry.cancelled ? (
-                <button type="button" disabled={busy} onClick={() => act(() => undoChange(panel.entry.cancelled!.groupId!))}>
-                  {busy ? 'Undoing...' : 'Undo'}
+                <button type="button" disabled={working} onClick={() => act(() => undoChange(panel.entry.cancelled!.groupId!))}>
+                  {working ? 'Undoing...' : 'Undo'}
                 </button>
               ) : (
                 <button
                   type="button"
                   className="danger"
-                  disabled={busy}
-                  onClick={() => act(() => cancelOccurrence(panel.entry.mergedIds?.[0] ?? panel.entry.id!, panel.date))}
+                  disabled={working}
+                  onClick={() => act(() => cancelOccurrence(panel.entry.id!, panel.date))}
                 >
-                  {busy ? 'Cancelling...' : `Cancel on ${formatDate(panel.date)}`}
+                  {working ? 'Cancelling...' : `Cancel on ${formatDate(panel.date)}`}
                 </button>
               )}
             </>
@@ -450,12 +404,12 @@ function MyTimetable({
                 {panel.change.endTime} · {KIND_LABEL[panel.change.kind].toLowerCase()} by{' '}
                 {personLabel(panel.change.changedBy)}
               </span>
-              <button type="button" className="danger" disabled={busy} onClick={() => act(() => undoChange(panel.change.groupId!))}>
-                {busy ? 'Undoing...' : 'Undo'}
+              <button type="button" className="danger" disabled={working} onClick={() => act(() => undoChange(panel.change.groupId!))}>
+                {working ? 'Undoing...' : 'Undo'}
               </button>
             </>
           )}
-          <button type="button" disabled={busy} onClick={() => setPanel(null)}>
+          <button type="button" disabled={working} onClick={() => setPanel(null)}>
             Close
           </button>
         </div>

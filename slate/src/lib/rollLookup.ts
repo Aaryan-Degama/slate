@@ -21,7 +21,7 @@ export type ResolvedSection = {
 }
 
 type Query = () => Promise<{ data: unknown; errors?: { message: string }[] }>
-const q = client.queries as unknown as { mySection: Query; batchRoster: Query }
+const q = client.queries as unknown as { mySection: Query; batchRoster: Query; myTimetable: Query }
 
 async function run<T>(fn: Query): Promise<T | null> {
   const res = await fn()
@@ -54,3 +54,31 @@ export type BatchRoster = {
 
 /** Every section of the signed-in student's own batch (never another batch). */
 export const fetchBatchRoster = () => run<BatchRoster>(q.batchRoster)
+
+/** One course as taught to one audience by one professor. */
+export type Offering = {
+  offeringKey: string
+  courseCode: string
+  courseName: string | null
+  kind: string | null
+  faculty: string | null
+  sections: string[]
+}
+export type Meeting = {
+  id: string
+  offeringKey: string
+  courseId: string
+  courseName: string | null
+  kind: string | null
+  faculty: string | null
+  section: string
+  day: string
+  startTime: string
+  endTime: string
+  room: string | null
+  sessionType: string | null
+}
+/** The signed-in student's week: the offerings they're registered in and
+ * every meeting of those offerings (docs/DATA-MODEL.md). */
+export type MyTimetable = ResolvedSection & { rollId: string; offerings: Offering[]; meetings: Meeting[] }
+export const fetchMyTimetable = () => run<MyTimetable>(q.myTimetable)

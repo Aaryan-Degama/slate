@@ -8,6 +8,8 @@ import {
 } from '@aws-sdk/lib-dynamodb'
 import { loadWorkbook } from '../parse-timetable/load'
 import { processSheet, readTemplate, WHOLE_BATCH } from '../parse-timetable/reader'
+import { buildOfferings, meetingKey } from './offerings'
+import { matchOffering, type RegRow } from './registrations'
 import { readTable } from '../parse-timetable/table'
 import { buildStudentRecords } from './students'
 
@@ -21,6 +23,8 @@ type Args = {
   rollCol?: number | null
   emailCol?: number | null
   nameCol?: number | null
+  courseCol?: number | null
+  facultyCol?: number | null
   onlyPrefixes?: (string | null)[] | null
   sectionCol?: number | null
   subSectionCol?: number | null
@@ -40,6 +44,12 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 })
 const TT = process.env.TIMETABLE_SLOT_TABLE!
 const SS = process.env.STUDENT_SECTION_TABLE!
+const CO = process.env.COURSE_TABLE!
+const OF = process.env.OFFERING_TABLE!
+const ME = process.env.CLASS_MEETING_TABLE!
+const RG = process.env.REGISTRATION_TABLE!
+// The term everything belongs to (docs/DATA-MODEL.md); one per semester.
+const TERM = '2026-ODD'
 const RR = process.env.ROLL_RANGE_TABLE!
 
 async function scanAll(table: string): Promise<Item[]> {
@@ -157,6 +167,31 @@ export const handler = async (event: Event) => {
 
     if (!a.dryRun) {
       await batchWrite(TT, added.map((r) => newItem('TimetableSlot', r)))
+
+      // The same classes as courses / offerings / meetings (docs/DATA-MODEL.md).
+      const built = buildOfferings(
+        rows.map((r) => ({ ...r, isElective: Boolean(r.isElective), faculty: r.faculty ?? null })),
+        batch,
+        parsed.legend,
+        TERM,
+      )
+      const [haveCourses, haveOfferings, haveMeetings] = await Promise.all([scanAll(CO), scanAll(OF), scanAll(ME)])
+      const known = (items: Item[], key: (i: Item) => string) => new Set(items.map(key))
+      const courseKeys = known(haveCourses, (c) => `${c.term}|${c.code}`)
+      const offeringKeys = known(haveOfferings, (o) => String(o.offeringKey))
+      const meetingKeys = known(haveMeetings, meetingKey)
+      await batchWrite(CO, built.courses.filter((c) => !courseKeys.has(`${c.term}|${c.code}`)).map((c) => newItem('Course', c)))
+      await batchWrite(
+        OF,
+        built.offerings.filter((o) => !offeringKeys.has(o.offeringKey)).map((o) => newItem('Offering', { ...o, ...batch })),
+      )
+      await batchWrite(ME, built.meetings.filter((m) => !meetingKeys.has(meetingKey(m))).map((m) => newItem('ClassMeeting', m)))
+      // An offering's sections can grow as more of a sheet is imported.
+      for (const o of built.offerings) {
+        const cur = haveOfferings.find((x) => x.offeringKey === o.offeringKey)
+        const merged = [...new Set([...((cur?.sections as string[]) ?? []), ...o.sections])].sort()
+        if (cur && merged.join(',') !== ((cur.sections as string[]) ?? []).join(',')) await update(OF, cur.id, { sections: merged })
+      }
       for (const c of changed) await update(TT, c.cur.id, { endTime: c.next.endTime, room: c.next.room, faculty: c.next.faculty })
       if (a.removeMissing) await batchWrite(TT, removed.map((e) => del(e.id)))
       await batchWrite(
@@ -271,6 +306,73 @@ export const handler = async (event: Event) => {
       // listed as problems: one file holds a whole admission year.
       otherProgramme,
       problems: problems.slice(0, 200).map((r) => ({ line: r.line, problems: r.problems })),
+      problemCount: problems.length,
+    }
+  } else if (a.kind === 'registrations') {
+    // Who takes what, from the institute's registration / examinee list.
+    const table = readTable(ws)
+    const col = (c: number | null | undefined) => (c === null || c === undefined ? -1 : c)
+    const [rollC, courseC, facultyC] = [col(a.rollCol), col(a.courseCol), col(a.facultyCol)]
+    if (rollC < 0 || courseC < 0) throw new Error('Say which columns hold the roll number and the course name.')
+
+    const regs: RegRow[] = table.rows.flatMap((row, i) => {
+      const rollId = (row[rollC] ?? '').trim().toUpperCase()
+      const course = (row[courseC] ?? '').trim()
+      if (!/^[A-Z]{2,4}\d{4}\d+$/.test(rollId) || !course) return []
+      return [{ line: i + 1, rollId, course, faculty: facultyC < 0 ? '' : (row[facultyC] ?? '').trim() }]
+    })
+
+    const [students, offerings, existing] = await Promise.all([scanAll(SS), scanAll(OF), scanAll(RG)])
+    const rollOf = (s: Item) =>
+      `${s.rollPrefix ? String(s.rollPrefix) : `I${String(s.branch).toUpperCase()}`}${s.admissionYear}${String(s.rollNumber).padStart(3, '0')}`
+    const studentBy = new Map(students.map((s) => [rollOf(s), s]))
+    const byBatch = new Map<string, Item[]>()
+    for (const o of offerings) {
+      const k = `${o.program}|${o.branch}|${o.semester}`
+      byBatch.set(k, [...(byBatch.get(k) ?? []), o])
+    }
+
+    const problems: { line: number; problems: string[] }[] = []
+    const wanted = new Map<string, Record<string, unknown>>()
+    let unknownStudents = 0
+    for (const reg of regs) {
+      const student = studentBy.get(reg.rollId)
+      if (!student) {
+        unknownStudents++
+        continue
+      }
+      const mine = byBatch.get(`${student.program}|${student.branch}|${Number(student.semester)}`) ?? []
+      const m = matchOffering(reg, mine)
+      if (!m.offeringKey) {
+        problems.push({ line: reg.line, problems: [`${reg.rollId} ${m.reason}`] })
+        continue
+      }
+      wanted.set(`${reg.rollId}|${m.offeringKey}`, {
+        term: TERM,
+        rollId: reg.rollId,
+        offeringKey: m.offeringKey,
+        source: 'REGISTRY',
+      })
+    }
+
+    const have = new Set(existing.map((e) => `${e.rollId}|${e.offeringKey}`))
+    const added = [...wanted.values()].filter((w) => !have.has(`${w.rollId}|${w.offeringKey}`))
+    const removed = existing.filter((e) => !wanted.has(`${e.rollId}|${e.offeringKey}`))
+    if (!a.dryRun) {
+      await batchWrite(RG, added.map((r) => newItem('Registration', r)))
+      if (a.removeMissing) await batchWrite(RG, removed.map((e) => del(e.id)))
+    }
+
+    result = {
+      kind: 'registrations',
+      students: new Set([...wanted.values()].map((w) => w.rollId)).size,
+      unknownStudents,
+      added: added.length,
+      unchanged: wanted.size - added.length,
+      removed: removed.length,
+      changed: [],
+      changedCount: 0,
+      problems: problems.slice(0, 200),
       problemCount: problems.length,
     }
   } else {

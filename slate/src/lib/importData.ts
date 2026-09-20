@@ -6,13 +6,15 @@ const client = generateClient<Schema>()
 export type ImportArgs = {
   key: string
   sheet: string
-  kind: 'timetable' | 'students'
+  kind: 'timetable' | 'students' | 'registrations'
   program: string
   branch: string
   semester: number
   rollCol?: number | null
   emailCol?: number | null
   nameCol?: number | null
+  courseCol?: number | null
+  facultyCol?: number | null
   onlyPrefixes?: string[]
   sectionCol?: number | null
   subSectionCol?: number | null
@@ -25,7 +27,7 @@ export type ImportArgs = {
   dryRun: boolean
 }
 export type ImportResult = {
-  kind: 'timetable' | 'students'
+  kind: 'timetable' | 'students' | 'registrations'
   added: number
   unchanged: number
   removed: number

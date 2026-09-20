@@ -33,6 +33,7 @@ type Entity = { uid: { type: string; id: string }; attrs: Record<string, CedarVa
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const env = (k: string) => process.env[k]!
 const [SC, TT, CR, SS, RR, EN] = ['SCHEDULE_CHANGE_TABLE', 'TIMETABLE_SLOT_TABLE', 'CLASS_REP_TABLE', 'STUDENT_SECTION_TABLE', 'ROLL_RANGE_TABLE', 'ENROLLMENT_TABLE'].map(env)
+const [OF, ME, RG] = ['OFFERING_TABLE', 'CLASS_MEETING_TABLE', 'REGISTRATION_TABLE'].map(env)
 
 async function scanAll(table: string): Promise<Row[]> {
   const items: Row[] = []
@@ -141,6 +142,13 @@ const sectionEntity = (ctx: Ctx, key: string): Entity => {
   return { uid: { type: 'Slate::Section', id: key }, attrs, parents: [] }
 }
 
+/** An offering, with the CRs of the sections it is timetabled for. */
+const offeringEntity = (ctx: Ctx, offering: Row): Entity => {
+  const sections = ((offering.sections as string[]) ?? []).map((sec) => `${batchKey(offering)}|${String(sec)[0]}`)
+  const crs = ctx.reps.filter((r) => sections.includes(String(r.sectionKey))).map((r) => ({ __entity: user(String(r.sub)) }))
+  return { uid: { type: 'Slate::Offering', id: String(offering.offeringKey) }, attrs: { crs }, parents: [] }
+}
+
 /** A course's class(es) in a batch, with the CRs of every section in them. */
 const courseEntity = (ctx: Ctx, batch: Batch, courseId: string, rows: Row[]): Entity => {
   const keys = new Set(rows.map(keyOf))
@@ -177,6 +185,20 @@ function newRow(ctx: Ctx, groupId: string, fields: Row): Row {
 }
 
 const live = (r: Row) => !r.undoneAt
+
+/** What a change records about the class it changes (display + matching). */
+const changeFields = (offering: Row, meeting: Row | null, kind: string, date: string): Row => ({
+  kind,
+  date,
+  offeringKey: offering.offeringKey,
+  ...(meeting ? { meetingId: meeting.id, startTime: meeting.startTime, endTime: meeting.endTime, ...(meeting.room ? { room: meeting.room } : {}), ...(meeting.sessionType ? { sessionType: meeting.sessionType } : {}) } : {}),
+  courseId: offering.courseCode,
+  ...(offering.faculty ? { faculty: offering.faculty } : {}),
+  program: offering.program,
+  branch: offering.branch,
+  semester: offering.semester,
+  section: ((offering.sections as string[]) ?? []).join(', '),
+})
 
 /** The regular class `slotId` on `date`, across every section it's held for together. */
 async function occurrence(slotId: string, date: string, slots: Row[]) {
@@ -262,6 +284,50 @@ export const handler = async (event: Event) => {
   const a = event.arguments
   const email = await emailOf(event.identity)
 
+  if (field === 'myTimetable') {
+    // A student attends the offerings they're registered in
+    // (docs/DATA-MODEL.md) -- their section only decides lab-split groups.
+    const home = await resolve(email)
+    if (!home) return JSON.stringify(null)
+    const [regs, offerings, meetings] = await Promise.all([scanAll(RG), scanAll(OF), scanAll(ME)])
+    const mine = new Set(regs.filter((r) => r.rollId === home.rollId).map((r) => String(r.offeringKey)))
+    const myOfferings = offerings.filter((o) => mine.has(String(o.offeringKey)))
+    const sub = home.subSection
+    const myMeetings = meetings
+      .filter((m) => mine.has(String(m.offeringKey)))
+      // A lab split: only the student's own half attends.
+      .filter((m) => !m.group || !sub || m.group === sub)
+      .map((m) => {
+        const o = myOfferings.find((x) => x.offeringKey === m.offeringKey)
+        return {
+          id: m.id,
+          offeringKey: m.offeringKey,
+          courseId: o?.courseCode ?? '',
+          courseName: o?.courseName ?? null,
+          kind: o?.kind ?? null,
+          faculty: o?.faculty ?? null,
+          section: m.group ?? (Array.isArray(o?.sections) ? (o!.sections as string[]).join(', ') : ''),
+          day: m.day,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          room: m.room ?? null,
+          sessionType: m.sessionType ?? null,
+        }
+      })
+    return JSON.stringify({
+      ...home,
+      offerings: myOfferings.map((o) => ({
+        offeringKey: o.offeringKey,
+        courseCode: o.courseCode,
+        courseName: o.courseName ?? null,
+        kind: o.kind ?? null,
+        faculty: o.faculty ?? null,
+        sections: o.sections ?? [],
+      })),
+      meetings: myMeetings,
+    })
+  }
+
   if (field === 'mySection') {
     // Home section (for the CR and the roster) plus exactly which classes
     // this student attends (enrollment exceptions applied).
@@ -326,54 +392,51 @@ export const handler = async (event: Event) => {
 
     case 'cancelOccurrence': {
       const date = checkDate(a.date)
-      const slots = await scanAll(TT)
-      const { slot, batch, together } = await occurrence(String(a.slotId), date, slots)
-      authorize(ctx, 'Cancel', courseEntity(ctx, batch, String(slot.courseId), together), 'Only the CR of a section in this class can cancel it.')
-      await assertNotCancelled(together, date)
-      const rows = cancelRows(ctx, randomUUID(), 'CANCELLED', date, together)
-      await writeRows(rows)
-      return JSON.stringify({ cancelled: rows.map((r) => r.section) })
+      const [meetings, offerings] = await Promise.all([scanAll(ME), scanAll(OF)])
+      const meeting = meetings.find((m) => m.id === a.meetingId)
+      if (!meeting) throw new Error('No such class.')
+      if (weekdayOf(date) !== meeting.day) throw new Error(`That class isn't held on ${weekdayOf(date)}.`)
+      const offering = offerings.find((o) => o.offeringKey === meeting.offeringKey)
+      if (!offering) throw new Error('That class has no offering.')
+      authorize(ctx, 'Cancel', offeringEntity(ctx, offering), "Only a CR of this class's section can cancel it.")
+      const clash = (await scanAll(SC)).find(
+        (c) => live(c) && c.date === date && c.meetingId === meeting.id && (c.kind === 'CANCELLED' || c.kind === 'MOVED_FROM'),
+      )
+      if (clash) throw new Error('That class is already cancelled or moved on that date.')
+      await writeRows([newRow(ctx, randomUUID(), changeFields(offering, meeting, 'CANCELLED', date))])
+      return JSON.stringify({ cancelled: offering.courseCode })
     }
 
     case 'addExtra': {
       const date = checkDate(a.date)
       checkTimes(a)
       if (!['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(weekdayOf(date))) throw new Error('Pick a weekday.')
-      // The course is looked up in the caller's own batch (an admin must say which batch).
-      const batch: Batch | null = a.program
-        ? { program: String(a.program), branch: String(a.branch), semester: Number(a.semester) }
-        : ctx.mine
-      if (!batch) throw new Error("Your section couldn't be found from your roll number.")
-      const slots = await scanAll(TT)
-      let courseRows = slots.filter((r) => inBatch(r, batch) && r.courseId === a.courseId && r.section !== '*')
-      if (!courseRows.length) throw new Error(`${a.courseId} isn't taught in ${batchKey(batch)}.`)
-      // A course can have a different professor per section (IML in IT
-      // Sem 5 has three). An extra class is the CR's professor's, so it
-      // reaches the sections that professor teaches, not every section.
-      if (ctx.mine) {
-        const profs = new Set(courseRows.filter((r) => keyOf(r) === keyOf(ctx.mine!) && r.faculty).map((r) => r.faculty))
-        if (profs.size) courseRows = courseRows.filter((r) => profs.has(r.faculty))
-      }
-      authorize(ctx, 'AddExtra', courseEntity(ctx, batch, String(a.courseId), courseRows), "Only the CR of a section taking this course can add a class for it.")
-      const rows = extraRows(ctx, randomUUID(), 'EXTRA', batch, courseRows, extraSections(courseRows, a.sections), { ...a, date })
-      await writeRows(rows)
-      return JSON.stringify({ added: rows.map((r) => r.section) })
+      const offering = (await scanAll(OF)).find((o) => o.offeringKey === a.offeringKey)
+      if (!offering) throw new Error('No such class.')
+      authorize(ctx, 'AddExtra', offeringEntity(ctx, offering), "Only a CR of this class's section can add a class for it.")
+      await writeRows([
+        newRow(ctx, randomUUID(), { ...changeFields(offering, null, 'EXTRA', date), startTime: a.startTime, endTime: a.endTime, ...(a.room ? { room: a.room } : {}) }),
+      ])
+      return JSON.stringify({ added: offering.courseCode })
     }
 
     case 'moveOccurrence': {
       const fromDate = checkDate(a.fromDate)
       const date = checkDate(a.date)
       checkTimes(a)
-      const slots = await scanAll(TT)
-      const { slot, batch, together } = await occurrence(String(a.slotId), fromDate, slots)
-      authorize(ctx, 'Move', courseEntity(ctx, batch, String(slot.courseId), together), 'Only the CR of a section in this class can move it.')
-      await assertNotCancelled(together, fromDate)
+      const [meetings, offerings] = await Promise.all([scanAll(ME), scanAll(OF)])
+      const meeting = meetings.find((m) => m.id === a.meetingId)
+      if (!meeting) throw new Error('No such class.')
+      if (weekdayOf(fromDate) !== meeting.day) throw new Error(`That class isn't held on ${weekdayOf(fromDate)}.`)
+      const offering = offerings.find((o) => o.offeringKey === meeting.offeringKey)
+      if (!offering) throw new Error('That class has no offering.')
+      authorize(ctx, 'Move', offeringEntity(ctx, offering), "Only a CR of this class's section can move it.")
       const groupId = randomUUID()
-      const from = cancelRows(ctx, groupId, 'MOVED_FROM', fromDate, together)
-      // The moved class keeps the occurrence's sections (and a room, if given).
-      const to = extraRows(ctx, groupId, 'MOVED_TO', batch, together, reach(together.map((r) => String(r.section))), { ...a, date })
-      await writeRows([...from, ...to])
-      return JSON.stringify({ moved: to.map((r) => r.section) })
+      await writeRows([
+        newRow(ctx, groupId, changeFields(offering, meeting, 'MOVED_FROM', fromDate)),
+        newRow(ctx, groupId, { ...changeFields(offering, meeting, 'MOVED_TO', date), startTime: a.startTime, endTime: a.endTime, ...(a.room ? { room: a.room } : { room: meeting.room }) }),
+      ])
+      return JSON.stringify({ moved: offering.courseCode })
     }
 
     case 'undoChange': {

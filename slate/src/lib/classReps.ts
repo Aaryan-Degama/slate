@@ -47,9 +47,9 @@ type Result = Promise<{ errors?: { message: string }[] }>
 type Times = { date: string; startTime: string; endTime: string; room?: string | null }
 const m = client.mutations as unknown as {
   claimCr: () => Result
-  cancelOccurrence: (a: { slotId: string; date: string }) => Result
-  addExtra: (a: Times & { courseId: string; sections?: string[] }) => Result
-  moveOccurrence: (a: Times & { slotId: string; fromDate: string }) => Result
+  cancelOccurrence: (a: { meetingId: string; date: string }) => Result
+  addExtra: (a: Times & { offeringKey: string }) => Result
+  moveOccurrence: (a: Times & { meetingId: string; fromDate: string }) => Result
   undoChange: (a: { groupId: string }) => Result
 }
 const call = async (p: Result) => {
@@ -58,7 +58,7 @@ const call = async (p: Result) => {
 }
 
 export const claimCr = () => call(m.claimCr())
-export const cancelOccurrence = (slotId: string, date: string) => call(m.cancelOccurrence({ slotId, date }))
+export const cancelOccurrence = (meetingId: string, date: string) => call(m.cancelOccurrence({ meetingId, date }))
 export const addExtra = (a: Parameters<typeof m.addExtra>[0]) => call(m.addExtra(a))
 export const moveOccurrence = (a: Parameters<typeof m.moveOccurrence>[0]) => call(m.moveOccurrence(a))
 export const undoChange = (groupId: string) => call(m.undoChange({ groupId }))

@@ -24,6 +24,12 @@ for (const [model, env] of [
   ['TimetableSlot', 'TIMETABLE_SLOT_TABLE'],
   ['StudentSection', 'STUDENT_SECTION_TABLE'],
   ['RollRange', 'ROLL_RANGE_TABLE'],
+  ['Enrollment', 'ENROLLMENT_TABLE'],
+  ['Course', 'COURSE_TABLE'],
+  ['Offering', 'OFFERING_TABLE'],
+  ['ClassMeeting', 'CLASS_MEETING_TABLE'],
+  ['Registration', 'REGISTRATION_TABLE'],
+  ['Student', 'STUDENT_TABLE'],
 ] as const) {
   tables[model].grantReadWriteData(importFn);
   backend.importData.addEnvironment(env, tables[model].tableName);
@@ -38,6 +44,9 @@ for (const [model, env] of [
   ['StudentSection', 'STUDENT_SECTION_TABLE'],
   ['RollRange', 'ROLL_RANGE_TABLE'],
   ['Enrollment', 'ENROLLMENT_TABLE'],
+  ['Offering', 'OFFERING_TABLE'],
+  ['ClassMeeting', 'CLASS_MEETING_TABLE'],
+  ['Registration', 'REGISTRATION_TABLE'],
 ] as const) {
   tables[model].grantReadData(findFn);
   backend.findSlots.addEnvironment(env, tables[model].tableName);
@@ -53,6 +62,9 @@ for (const [model, env, write] of [
   ['StudentSection', 'STUDENT_SECTION_TABLE', false],
   ['RollRange', 'ROLL_RANGE_TABLE', false],
   ['Enrollment', 'ENROLLMENT_TABLE', false],
+  ['Offering', 'OFFERING_TABLE', false],
+  ['ClassMeeting', 'CLASS_MEETING_TABLE', false],
+  ['Registration', 'REGISTRATION_TABLE', false],
 ] as const) {
   if (write) tables[model].grantReadWriteData(changesFn);
   else tables[model].grantReadData(changesFn);

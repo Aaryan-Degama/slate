@@ -214,7 +214,7 @@ function SignedIn({ userId, signOut }: { userId: string; signOut: () => void }) 
         />
       )}
       {studentTab === 'batch' && <MyBatch />}
-      {studentTab === 'find' && isCr && <NewRequest mySection={profile.linkedSection} isCr={isCr} />}
+      {studentTab === 'find' && isCr && <NewRequest isCr={isCr} />}
     </AppShell>
   )
 }

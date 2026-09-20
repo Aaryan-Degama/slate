@@ -17,11 +17,12 @@ permit (
 )
 when { principal.section == resource.key && !resource.hasCr };
 
-// Cancel / add / move a course's class: the CR of any section taking it.
+// Cancel / add / move a class of an offering (one course, one professor,
+// one audience): a CR of a section that offering is taught to.
 permit (
   principal,
   action in [Slate::Action::"Cancel", Slate::Action::"AddExtra", Slate::Action::"Move"],
-  resource is Slate::Course
+  resource is Slate::Offering
 )
 when { resource.crs.contains(principal) };
 

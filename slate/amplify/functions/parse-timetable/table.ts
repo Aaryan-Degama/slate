@@ -20,7 +20,8 @@ export type TableResult = {
   guess: ColumnGuess
 }
 
-const MAX_ROWS = 5000
+// The institute-wide registration list runs to ~17k rows.
+const MAX_ROWS = 60000
 const ROLL_HEADER = /(roll|enrol|registration|reg\.?\s*no|admission\s*no|student\s*id)/i
 const SECTION_HEADER = /(sec|group|batch)/i
 const NAME_HEADER = /name/i

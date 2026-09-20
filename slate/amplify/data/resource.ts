@@ -18,6 +18,91 @@ const schema = a.schema({
   ChangeKind: a.enum(['CANCELLED', 'EXTRA', 'MOVED_FROM', 'MOVED_TO']),
   EnrollmentAction: a.enum(['ADD', 'DROP']),
 
+  // ---------------------------------------------------------------- courses
+  // What a course is, independent of who teaches it or when. Kind comes
+  // from the timetable legend ("MDM-n" is a minor, "Basket n"/"OPEN
+  // ELECTIVE" are electives); see docs/DATA-MODEL.md.
+  CourseKind: a.enum(['CORE', 'ELECTIVE', 'MINOR', 'OPEN_ELECTIVE', 'BASKET']),
+
+  Course: a
+    .model({
+      term: a.string().required(), // "2026-ODD"
+      code: a.string().required(), // as printed in the timetable
+      name: a.string(),
+      kind: a.ref('CourseKind'),
+      ltps: a.string(), // "3-0-2-0"
+    })
+    .secondaryIndexes((i) => [i('term').sortKeys(['code'])])
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+
+  // One course as actually taught this term: one professor, one audience.
+  // IML in IT Sem 5 is three offerings (one per section's professor). This
+  // is what students register for and what a timetable cell belongs to.
+  Offering: a
+    .model({
+      offeringKey: a.string().required(), // term|program|branch|semester|code|faculty
+      term: a.string().required(),
+      courseCode: a.string().required(),
+      courseName: a.string(),
+      kind: a.ref('CourseKind'),
+      faculty: a.string(),
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      // Sections it is timetabled for; ['*'] for a batch-wide elective.
+      sections: a.string().array(),
+    })
+    .secondaryIndexes((i) => [i('offeringKey'), i('term').sortKeys(['courseCode'])])
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+
+  // A weekly slot of an offering: the timetable grid itself.
+  ClassMeeting: a
+    .model({
+      offeringKey: a.string().required(),
+      term: a.string().required(),
+      day: a.string().required(),
+      startTime: a.string().required(),
+      endTime: a.string().required(),
+      room: a.string(),
+      sessionType: a.string(), // L | T | P
+      // A lab split: only that half of the section attends.
+      group: a.string(),
+    })
+    .secondaryIndexes((i) => [i('offeringKey').sortKeys(['day', 'startTime']), i('term').sortKeys(['day'])])
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+
+  // Who takes what: straight from the institute's registration/examinee
+  // list. The source of truth for a student's timetable -- no section
+  // defaults, no exceptions.
+  Registration: a
+    .model({
+      term: a.string().required(),
+      rollId: a.string().required(), // "IIT2024245"
+      offeringKey: a.string().required(),
+      source: a.string(), // REGISTRY | ADMIN
+    })
+    .secondaryIndexes((i) => [i('rollId').sortKeys(['term']), i('offeringKey').sortKeys(['rollId'])])
+    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+
+  // One row per student, from the admin-uploaded per-year lists. Section is
+  // kept for the CR and for lab splits, not to decide what they attend.
+  // Admin-only: students see their own batch through batchRoster.
+  Student: a
+    .model({
+      rollId: a.string().required(),
+      rollPrefix: a.string().required(), // IIT | IIB | IEC ...
+      admissionYear: a.string().required(),
+      rollNumber: a.integer().required(),
+      name: a.string(),
+      program: a.string().required(),
+      branch: a.string().required(),
+      semester: a.integer().required(),
+      section: a.string().required(),
+      subSection: a.string(),
+    })
+    .secondaryIndexes((i) => [i('rollId'), i('branch').sortKeys(['semester', 'section'])])
+    .authorization((allow) => [allow.group('ADMIN')]),
+
   User: a
     .model({
       email: a.string().required(),
@@ -75,10 +160,15 @@ const schema = a.schema({
       groupId: a.string().required(),
       kind: a.ref('ChangeKind').required(),
       date: a.string().required(), // YYYY-MM-DD (IST)
-      program: a.string().required(),
-      branch: a.string().required(),
-      semester: a.integer().required(),
-      section: a.string().required(),
+      // What it changes: an offering (so it reaches exactly its registered
+      // students) and, for a cancel/move, the meeting it refers to.
+      offeringKey: a.string(),
+      meetingId: a.id(),
+      // Display only, copied from the offering.
+      program: a.string(),
+      branch: a.string(),
+      semester: a.integer(),
+      section: a.string(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       courseId: a.string().required(),
@@ -93,6 +183,7 @@ const schema = a.schema({
       undoneBy: a.string(),
       undoneAt: a.datetime(),
     })
+    .secondaryIndexes((i) => [i('offeringKey').sortKeys(['date'])])
     .authorization((allow) => [allow.authenticated().to(['read'])]),
 
   // A section's class representative: the one student who may change that
@@ -159,10 +250,9 @@ const schema = a.schema({
   findSlots: a
     .query()
     .arguments({
-      groups: a.string().array().required(), // "program|branch|semester|section"
+      offeringKey: a.string().required(),
       dates: a.string().array().required(), // YYYY-MM-DD
-      courseId: a.string(), // adds the course professor's timetable
-      ignoreSlotId: a.string(), // a move: the class being moved doesn't block itself
+      ignoreMeetingId: a.string(), // a move: the class being moved doesn't block itself
       earliestTime: a.string(),
       latestTime: a.string(),
       minDurationMins: a.integer(),
@@ -176,6 +266,13 @@ const schema = a.schema({
   // every signed-in user on purpose -- the policy, not the API layer,
   // decides who may do what. Dates are YYYY-MM-DD.
   // Read-only: the caller's own section, and their own batch's roster.
+  // Everything a student's week needs: their section (for the CR), the
+  // offerings they're registered in, and those offerings' meetings.
+  myTimetable: a
+    .query()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
   mySection: a
     .query()
     .returns(a.json())
@@ -193,24 +290,18 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()]),
   cancelOccurrence: a
     .mutation()
-    .arguments({ slotId: a.id().required(), date: a.string().required() })
+    .arguments({ meetingId: a.id().required(), date: a.string().required() })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
   addExtra: a
     .mutation()
     .arguments({
-      courseId: a.string().required(),
+      offeringKey: a.string().required(),
       date: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       room: a.string(),
-      // Subset of the course's sections; empty = all of them.
-      sections: a.string().array(),
-      // Admins only: which batch (a CR's batch is their own).
-      program: a.string(),
-      branch: a.string(),
-      semester: a.integer(),
     })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
@@ -218,7 +309,7 @@ const schema = a.schema({
   moveOccurrence: a
     .mutation()
     .arguments({
-      slotId: a.id().required(),
+      meetingId: a.id().required(),
       fromDate: a.string().required(),
       date: a.string().required(),
       startTime: a.string().required(),
@@ -253,13 +344,15 @@ const schema = a.schema({
     .arguments({
       key: a.string().required(),
       sheet: a.string().required(),
-      kind: a.string().required(), // 'timetable' | 'students'
+      kind: a.string().required(), // 'timetable' | 'students' | 'registrations'
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),
       rollCol: a.integer(),
       emailCol: a.integer(),
       nameCol: a.integer(),
+      courseCol: a.integer(),
+      facultyCol: a.integer(),
       // Roll prefixes this batch takes (IIT, IIB...); one sheet can list a
       // whole admission year across programmes.
       onlyPrefixes: a.string().array(),

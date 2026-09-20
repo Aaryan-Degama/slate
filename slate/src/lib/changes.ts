@@ -5,10 +5,11 @@
 import { formatDate, type ChangeEntry } from './grid'
 
 export type ChangeRow = ChangeEntry & {
-  program: string
-  branch: string
-  semester: number
-  section: string
+  offeringKey?: string | null
+  meetingId?: string | null
+  program?: string | null
+  branch?: string | null
+  semester?: number | null
   createdAt: string
 }
 
@@ -51,15 +52,17 @@ export function toActions(rows: ChangeRow[]): Action[] {
         groupId,
         kind: from && to ? 'MOVED' : from ? 'CANCELLED' : 'EXTRA',
         courseId: first.courseId,
-        batch: `${first.program} ${first.branch} Sem ${first.semester}`,
-        sections: [...new Set((live.length ? live : main).map((r) => r.section))].sort(),
+        batch: [first.program, first.branch, first.semester ? `Sem ${first.semester}` : ''].filter(Boolean).join(' '),
+        sections: [...new Set((live.length ? live : main).map((r) => r.section).filter((x): x is string => !!x))].sort(),
         from,
         to,
         changedBy: first.changedBy,
         changedBySection: first.changedBySection,
         createdAt: g.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), first.createdAt),
         undone: live.length === 0,
-        partlyUndoneFor: live.length ? [...new Set(main.filter((r) => r.undoneAt).map((r) => r.section))].sort() : [],
+            partlyUndoneFor: live.length
+          ? [...new Set(main.filter((r) => r.undoneAt).map((r) => r.section).filter((x): x is string => !!x))].sort()
+          : [],
         undoneBy: main.find((r) => r.undoneAt)?.undoneBy,
         date: [from?.date, to?.date].filter(Boolean).sort().pop()!,
       } satisfies Action

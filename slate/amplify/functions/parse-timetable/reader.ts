@@ -81,6 +81,8 @@ export type SheetResult = {
   rows: Row[]
   skipped: Skipped[]
   issues: Issue[]
+  /** Course code -> what the sheet's legend says about it. */
+  legend: Record<string, { name: string; ltps: number[] | null; core: boolean }>
 }
 
 const to24h = (h: string, m: string) => {
@@ -497,6 +499,9 @@ export function processSheet(ws: Worksheet): SheetResult {
     }),
     skipped,
     issues,
+    legend: Object.fromEntries(
+      Object.entries(sheet.legend).map(([code, l]) => [code, { name: l.name, ltps: l.ltps, core: l.core }]),
+    ),
   }
 }
 
@@ -605,6 +610,7 @@ export function readTemplate(ws: Worksheet): SheetResult | null {
     title: `${ws.name} (Slate template)`,
     batch,
     needsSection: false,
+    legend: {},
     rollRanges: [],
     rows: rows.map((row) => {
       const { longEndTime: _, ...r } = row
