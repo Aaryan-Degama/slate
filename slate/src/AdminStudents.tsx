@@ -78,6 +78,7 @@ export default function AdminStudents() {
   const [slots, setSlots] = useState<SlotRow[]>([])
   const [key, setKey] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [showRanges, setShowRanges] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -167,6 +168,7 @@ export default function AdminStudents() {
               setKey(k)
               setDraft(null)
               setError('')
+              setShowRanges(false)
             }}
           >
             {b.program} {b.branch} — Semester {b.semester}
@@ -174,10 +176,24 @@ export default function AdminStudents() {
         ))}
       </div>
 
+      {batch && mine.length > 0 && !showRanges && (
+        <p className="meta">
+          {mine.length} students uploaded for this batch, so roll ranges aren't needed.{' '}
+          <button type="button" className="link" onClick={() => setShowRanges(true)}>
+            Show roll ranges{myRanges.length ? ` (${myRanges.length})` : ''}
+          </button>
+        </p>
+      )}
+
       {batch && (
         <>
+          {(mine.length === 0 || showRanges) && (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <h2>Roll ranges</h2>
+            <p className="subtitle">
+              A fallback for batches with no uploaded list: "Sec A = rolls 1–107" places a student whose roll isn't
+              listed. An uploaded list always wins.
+            </p>
             <p className="subtitle">
               Sections in this batch's timetable: {sectionsInTimetable.join(', ') || 'none'}.{' '}
               {split.length > 0 && 'For a split like B1/B2, add a range for each sub-section inside B.'}
@@ -271,6 +287,7 @@ export default function AdminStudents() {
             )}
             {error && <p className="error">{error}</p>}
           </div>
+          )}
 
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <h2>Students</h2>
