@@ -216,7 +216,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
             </label>
           ))}
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-scroll">
           <table className="admin-table">
             <thead>
               <tr>
@@ -232,7 +232,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
               </tr>
             </thead>
             <tbody>
-              {sheet.rows.slice(0, 5).map((row, i) => (
+              {sheet.rows.map((row, i) => (
                 <tr key={i}>
                   {sheet.headers.map((_, c) => (
                     <td key={c}>{row[c]}</td>
@@ -242,7 +242,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
             </tbody>
           </table>
         </div>
-        <p className="meta">{sheet.rows.length} rows in total.</p>
+        <p className="meta">{sheet.rows.length} rows in total — scroll the table to check them.</p>
       </div>
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
