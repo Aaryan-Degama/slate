@@ -56,6 +56,22 @@ function layoutDay(row: Cell[]): { items: Placed[]; lanes: number } {
   return { items, lanes: Math.max(lanes.length, 1) }
 }
 
+/** Where the current time falls across the hour columns, as a percentage
+ * of the row's width -- the amber line that says "you are here". */
+function nowAcross(): number | null {
+  const now = new Date(Date.now() + 5.5 * 3600e3) // IST
+  const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
+  const at = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+  const first = at(HOURS[0].start)
+  const last = at(HOURS[HOURS.length - 1].end)
+  if (mins < first || mins > last) return null
+  // Columns are equal width, so position within the column it falls in.
+  const i = HOURS.findIndex((h) => mins >= at(h.start) && mins <= at(h.end))
+  if (i < 0) return null
+  const share = (mins - at(HOURS[i].start)) / (at(HOURS[i].end) - at(HOURS[i].start))
+  return ((i + share) / HOURS.length) * 100
+}
+
 export default function TimetableGrid({
   grid,
   freeIsHighlighted = false,
@@ -63,6 +79,7 @@ export default function TimetableGrid({
   onEmptyClick,
   onChangeClick,
   dayLabels,
+  today,
 }: {
   grid: Cell[][]
   /** When true, an empty cell renders as a green "free" highlight
@@ -77,10 +94,15 @@ export default function TimetableGrid({
   onChangeClick?: (change: ChangeEntry) => void
   /** Row labels, e.g. { MON: 'Mon 22 Sep' } for a dated week. */
   dayLabels?: Record<string, string>
+  /** The weekday to mark as today, if it falls in the week shown. */
+  today?: string
 }) {
   const editable = Boolean(onBusyClick || onEmptyClick)
+  const nowAt = today ? nowAcross() : null
+  const nowCol = nowAt === null ? -1 : Math.floor((nowAt / 100) * HOURS.length)
 
   return (
+    <div className="timetable-wrap">
     <table className="timetable-grid">
       <colgroup>
         <col className="day-col" />
@@ -91,8 +113,8 @@ export default function TimetableGrid({
       <thead>
         <tr>
           <th></th>
-          {HOURS.map((hour) => (
-            <th key={hour.start}>
+          {HOURS.map((hour, i) => (
+            <th key={hour.start} className={i === nowCol ? 'is-now' : undefined}>
               {hour.start}–{hour.end}
             </th>
           ))}
@@ -103,7 +125,7 @@ export default function TimetableGrid({
           const row = grid[di]
           const { items, lanes } = layoutDay(row)
           return (
-            <tr key={day}>
+            <tr key={day} className={day === today ? 'is-today' : undefined}>
               <th className="hour-label">{dayLabels?.[day] ?? day}</th>
               <td className="day-lanes" colSpan={HOURS.length}>
                 <div
@@ -113,6 +135,9 @@ export default function TimetableGrid({
                     gridTemplateRows: `repeat(${lanes}, auto)`,
                   }}
                 >
+                  {day === today && nowAt !== null && (
+                    <div className="now-line" style={{ left: `${nowAt}%`, gridRow: `1 / ${lanes + 1}` }} title="Now" />
+                  )}
                   {row.map((cell, hi) => {
                     // A cancelled class leaves its hour free (it stays visible, struck through).
                     const empty = cell.busy.every((b) => b.cancelled) && !cell.change
@@ -175,6 +200,7 @@ export default function TimetableGrid({
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 

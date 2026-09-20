@@ -4,6 +4,7 @@ import type { Schema } from '../amplify/data/resource'
 import TimetableGrid from './components/TimetableGrid'
 import {
   addDays,
+  removes as removesChange,
   buildGrid,
   dateIn,
   DAYS,
@@ -267,7 +268,9 @@ function MyTimetable({
         My Timetable — {section.program} {section.branch} Sem {section.semester} Sec{' '}
         {groups.subSection ?? groups.section}
       </h1>
-      <details className="my-courses" open>
+      <UpNext busy={busy} changes={data.changes} />
+
+      <details className="my-courses">
         <summary>
           My courses ({me.offerings.length})
           {withoutTimes.length > 0 && ` · ${withoutTimes.length} with no class times yet`}
@@ -487,6 +490,7 @@ function MyTimetable({
 
       <TimetableGrid
         grid={grid}
+        today={monday === thisMonday ? DAYS[new Date(`${today}T00:00:00Z`).getUTCDay() - 1] : undefined}
         freeIsHighlighted
         dayLabels={dayLabels}
         onEmptyClick={
@@ -502,3 +506,56 @@ function MyTimetable({
   )
 }
 
+
+/** The next class today, with how long until it starts -- what a student
+ * opens the app to find out. Cancelled classes are skipped, because the
+ * point is where to actually be. */
+function UpNext({ busy, changes }: { busy: BusyEntry[]; changes: ScheduleChangeRow[] }) {
+  const today = todayIst()
+  const day = DAYS[new Date(`${today}T00:00:00Z`).getUTCDay() - 1]
+  const week = forWeek(changes, mondayOf(today)).filter((c) => c.date === today)
+  const grid = day ? buildGrid(busy, week) : null
+  const now = new Date(Date.now() + 5.5 * 3600e3)
+  const mins = now.getUTCHours() * 60 + now.getUTCMinutes()
+  const at = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+
+  const classesToday = grid
+    ? [
+        ...grid[DAYS.indexOf(day as (typeof DAYS)[number])]
+          .flatMap((cell) => cell.busy.filter((b) => !b.cancelled).map((b) => ({ start: b.startTime, end: b.endTime, what: b.courseId, where: b.room })))
+          .concat(
+            week
+              .filter((c) => !removesChange(c.kind))
+              .map((c) => ({ start: c.startTime, end: c.endTime, what: c.courseId, where: c.room ?? null })),
+          )
+          .reduce((seen, c) => (seen.some((x) => x.start === c.start && x.what === c.what) ? seen : [...seen, c]), [] as { start: string; end: string; what: string; where: string | null | undefined }[]),
+      ].sort((a, b) => a.start.localeCompare(b.start))
+    : []
+
+  const current = classesToday.find((c) => mins >= at(c.start) && mins < at(c.end))
+  const next = classesToday.find((c) => at(c.start) > mins)
+  const until = next ? at(next.start) - mins : 0
+  const label = until >= 60 ? `in ${Math.floor(until / 60)} h ${until % 60} min` : `in ${until} min`
+
+  if (!day) return null
+  return (
+    <section className={`up-next${current || next ? '' : ' is-free'}`}>
+      <div className="up-next-main">
+        <div className="when">{current ? 'In class now' : next ? 'Up next' : 'Today'}</div>
+        <div className="what">
+          {current ? current.what : next ? next.what : classesToday.length ? "That's your day" : 'Nothing scheduled'}
+        </div>
+        <div className="where">
+          {current
+            ? `until ${current.end}${current.where ? ` · ${current.where}` : ''}`
+            : next
+              ? `${next.start}–${next.end}${next.where ? ` · ${next.where}` : ''}`
+              : classesToday.length
+                ? `${classesToday.length} class(es) done`
+                : 'No classes on your timetable today'}
+        </div>
+      </div>
+      {!current && next && <div className="countdown">{label}</div>}
+    </section>
+  )
+}
