@@ -47,6 +47,9 @@ export function buildStudentRecords(
   const oSec = overrides.section?.trim().toUpperCase() || oSub?.[0]
   const letters = new Set(batchSections.map((s) => s[0]))
   const subs = new Set(batchSections.filter((s) => s.length === 2))
+  // No timetable ingested for this batch yet (e.g. 7th semester): take the
+  // file's sections as given rather than rejecting every row.
+  const known = batchSections.length > 0
   const cell = (row: string[], c: number | null) => (c === null ? '' : (row[c] ?? '').trim())
 
   const recs = rows.map((row, i): StudentRecord => {
@@ -71,9 +74,9 @@ export function buildStudentRecords(
     const year = id.year ?? (yearInput || undefined)
     if (!year) problems.push('no admission year (enter it)')
     if (!section) problems.push('no section')
-    else if (!letters.has(section)) problems.push(`section ${section} isn't in this batch's timetable`)
+    else if (known && !letters.has(section)) problems.push(`section ${section} isn't in this batch's timetable`)
     if (sub) {
-      if (!subs.has(sub)) problems.push(`sub-section ${sub} isn't in this batch's timetable`)
+      if (known && !subs.has(sub)) problems.push(`sub-section ${sub} isn't in this batch's timetable`)
       if (section && sub[0] !== section) problems.push(`sub-section ${sub} doesn't belong to section ${section}`)
     }
     return { line: i + 1, year, roll: id.roll, prefix: id.prefix, name, section, subSection: sub, problems }

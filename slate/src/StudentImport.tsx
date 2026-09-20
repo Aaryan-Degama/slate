@@ -51,7 +51,9 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
     for (const s of slots ?? []) seen.set(`${s.program}|${s.branch}|${s.semester}`, s)
     return [...seen.entries()].sort((a, b) => a[1].semester - b[1].semester)
   }, [slots])
-  const semesters = [...new Set(batches.map(([, b]) => b.semester))].sort((a, b) => a - b)
+  // Odd semesters run this term; a batch with no timetable ingested yet
+  // (e.g. 7th) can still have its students loaded.
+  const semesters = [...new Set([...batches.map(([, b]) => b.semester), 1, 3, 5, 7])].sort((a, b) => a - b)
   const countByPrefix = useMemo(() => {
     const col = mapping.roll ?? mapping.email
     const out: Record<string, number> = {}
@@ -62,7 +64,21 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
     }
     return out
   }, [sheet, mapping])
-  const inSemester = batches.filter(([, b]) => String(b.semester) === semester)
+  const inSemester = useMemo(() => {
+    const n = Number(semester)
+    const real = batches.filter(([, b]) => b.semester === n)
+    // Offer every branch we know of, even where this semester's timetable
+    // hasn't been ingested: the students can go in first.
+    const branches = [...new Set(batches.map(([, b]) => `${b.program}|${b.branch}`))]
+    const extra = branches
+      .filter((k) => !real.some(([, b]) => `${b.program}|${b.branch}` === k))
+      .map((k) => {
+        const [program, branch] = k.split('|')
+        return [`${program}|${branch}|${n}`, { program, branch, semester: n }] as [string, SlotRow]
+      })
+    return [...real, ...extra].sort((a, b) => a[1].branch.localeCompare(b[1].branch))
+  }, [batches, semester])
+  const hasTimetable = (b: SlotRow) => batches.some(([, x]) => x.program === b.program && x.branch === b.branch && x.semester === b.semester)
 
   // One sheet can list a whole admission year across programmes (IIT, IIB,
   // IEC, BD...). Default to the ones whose letters match the batch's branch
@@ -95,7 +111,11 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
   const groups = useMemo(() => {
     const byBatch = new Map<string, string[]>()
     for (const [prefix, key] of Object.entries(assign)) if (key) byBatch.set(key, [...(byBatch.get(key) ?? []), prefix])
-    return [...byBatch.entries()].map(([key, prefixes]) => ({ batch: batches.find(([k]) => k === key)![1], prefixes }))
+    return [...byBatch.entries()].map(([key, prefixes]) => {
+      const [program, branch, sem] = key.split('|')
+      const batch = batches.find(([k]) => k === key)?.[1] ?? { program, branch, semester: Number(sem) }
+      return { batch, prefixes }
+    })
   }, [assign, batches])
 
   const run = async (dryRun: boolean) => {
@@ -286,6 +306,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
                         {inSemester.map(([k, b]) => (
                           <option key={k} value={k}>
                             {b.program} {b.branch} Sem {b.semester}
+                            {hasTimetable(b) ? '' : ' (no timetable yet)'}
                           </option>
                         ))}
                       </select>
