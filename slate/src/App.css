@@ -517,3 +517,57 @@ button.danger {
   font: inherit;
   user-select: all;
 }
+
+.week-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.feed {
+  margin: 0 0 16px;
+}
+
+.feed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.change-history li.new {
+  border-color: var(--free);
+  background: var(--free-bg);
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-bar input {
+  min-width: 180px;
+}
+
+/* A long student list stays inside the page, with its header in view. */
+.table-scroll {
+  max-height: 60vh;
+  overflow: auto;
+  border-radius: 10px;
+}
+
+.table-scroll table.admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-subtle);
+}
+
+table.admin-table tr.me {
+  background: var(--free-bg);
+}

@@ -1,4 +1,4 @@
-import { DAYS, HOURS, personLabel, type Cell, type BusyEntry, type ChangeEntry } from '../lib/grid'
+import { DAYS, HOURS, KIND_LABEL, personLabel, removes, type Cell, type BusyEntry, type ChangeEntry } from '../lib/grid'
 import { courseColor } from '../lib/courseColor'
 import { courseFullName } from '../lib/courseNames'
 import './TimetableGrid.css'
@@ -29,7 +29,7 @@ function layoutDay(row: Cell[]): { items: Placed[]; lanes: number } {
     }
     if (cell.change) {
       const c = cell.change
-      const key = `c:${c.courseId}|${c.startTime}|${c.endTime}|${c.changeType}`
+      const key = `c:${c.groupId ?? c.courseId}|${c.startTime}|${c.endTime}|${c.kind}`
       const existing = spans.get(key)
       if (existing) existing.end = hi
       else spans.set(key, { kind: 'change', change: c, start: hi, end: hi })
@@ -62,6 +62,7 @@ export default function TimetableGrid({
   onBusyClick,
   onEmptyClick,
   onChangeClick,
+  dayLabels,
 }: {
   grid: Cell[][]
   /** When true, an empty cell renders as a green "free" highlight
@@ -74,6 +75,8 @@ export default function TimetableGrid({
   onEmptyClick?: (day: string, start: string, end: string) => void
   /** CR: click an added class to withdraw it. */
   onChangeClick?: (change: ChangeEntry) => void
+  /** Row labels, e.g. { MON: 'Mon 22 Sep' } for a dated week. */
+  dayLabels?: Record<string, string>
 }) {
   const editable = Boolean(onBusyClick || onEmptyClick)
 
@@ -101,7 +104,7 @@ export default function TimetableGrid({
           const { items, lanes } = layoutDay(row)
           return (
             <tr key={day}>
-              <th className="hour-label">{day}</th>
+              <th className="hour-label">{dayLabels?.[day] ?? day}</th>
               <td className="day-lanes" colSpan={HOURS.length}>
                 <div
                   className="day-grid"
@@ -111,7 +114,8 @@ export default function TimetableGrid({
                   }}
                 >
                   {row.map((cell, hi) => {
-                    const empty = cell.busy.length === 0 && !cell.change
+                    // A cancelled class leaves its hour free (it stays visible, struck through).
+                    const empty = cell.busy.every((b) => b.cancelled) && !cell.change
                     return (
                       <div
                         key={`bg-${cell.start}`}
@@ -135,23 +139,21 @@ export default function TimetableGrid({
                       gridRow: `${it.lane + 1}`,
                     }
                     if (it.kind === 'change') {
-                      const cls =
-                        it.change.changeType === 'SCHEDULED' ? 'change-scheduled' : 'change-cancelled'
+                      const cls = removes(it.change.kind) ? 'change-cancelled' : 'change-scheduled'
                       return (
                         <div
                           key={`c-${it.change.courseId}-${it.start}`}
                           className={`slot-item change-block ${cls}${onChangeClick ? ' editable' : ''} has-tooltip`}
                           style={style}
                           onClick={onChangeClick ? () => onChangeClick(it.change) : undefined}
-                          data-tooltip={`Added by ${personLabel(it.change.changedBy)} (CR)`}
+                          data-tooltip={`${KIND_LABEL[it.change.kind]} · by ${personLabel(it.change.changedBy)}`}
                         >
                           <span className="course">
                             {it.change.courseId}
                             {it.change.room ? ` · ${it.change.room}` : ''}
                           </span>
                           <span className="tag">
-                            {it.change.changeType === 'SCHEDULED' ? 'Added' : 'Cancelled'} by{' '}
-                            {personLabel(it.change.changedBy)}
+                            {KIND_LABEL[it.change.kind]} · {personLabel(it.change.changedBy)}
                           </span>
                         </div>
                       )
@@ -192,7 +194,7 @@ function CourseBlock({
   const tooltipLines = [
     fullName ?? b.courseId,
     b.faculty ? `Taught by ${b.faculty}` : null,
-    b.cancelled ? `Cancelled by ${personLabel(b.cancelled.changedBy)} (CR)` : null,
+    b.cancelled ? `${KIND_LABEL[b.cancelled.kind]} by ${personLabel(b.cancelled.changedBy)}` : null,
   ]
     .filter(Boolean)
     .join('\n')
@@ -211,14 +213,18 @@ function CourseBlock({
             {b.section && (
               <>
                 <span className="section-dot">·</span>
-                <span className="section-label">Sec {b.section}</span>
+                <span className="section-label">{b.section === '*' ? 'Elective' : `Sec ${b.section}`}</span>
               </>
             )}
           </span>
         </span>
         {b.room && <span className="meta room">{b.room}</span>}
       </div>
-      {b.cancelled && <span className="cancelled-tag">Cancelled by {personLabel(b.cancelled.changedBy)}</span>}
+      {b.cancelled && (
+        <span className="cancelled-tag">
+          {KIND_LABEL[b.cancelled.kind]} · {personLabel(b.cancelled.changedBy)}
+        </span>
+      )}
     </div>
   )
 }

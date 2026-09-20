@@ -13,7 +13,10 @@ import { sectionChanges } from '../functions/section-changes/resource';
  */
 const schema = a.schema({
   Role: a.enum(['STUDENT', 'FACULTY', 'ADMIN']),
-  ChangeType: a.enum(['SCHEDULED', 'CANCELLED']),
+  // CANCELLED: a regular class called off on one date. EXTRA: a one-off
+  // class. MOVED_FROM/MOVED_TO: the two halves of a move (same groupId).
+  ChangeKind: a.enum(['CANCELLED', 'EXTRA', 'MOVED_FROM', 'MOVED_TO']),
+  EnrollmentAction: a.enum(['ADD', 'DROP']),
 
   User: a
     .model({
@@ -23,8 +26,10 @@ const schema = a.schema({
       // real section/faculty name already in TimetableSlot, never new
       // schedule data. { program, branch, section } for students.
       linkedSection: a.json(),
-      // Real faculty display name as it appears in TimetableSlot.faculty.
-      linkedFacultyName: a.string(),
+      // When the student last looked at their "What changed" feed; changes
+      // made after this are shown as new (kept here so it follows them
+      // across devices).
+      changesSeenAt: a.datetime(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.owner()]),
 
@@ -53,29 +58,38 @@ const schema = a.schema({
       // tag in the source cell text -- captured during extraction but
       // originally discarded; backfilled from the same real source.
       sessionType: a.string(),
+      // A batch-wide elective (section '*'): attended only by students
+      // enrolled in it; until enrollments exist, shown to everyone as
+      // "elective (registration not uploaded)".
+      isElective: a.boolean(),
     })
     .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
 
-  // A change to one section's timetable, made by that section's CR (or an
-  // admin) through the section-changes Lambda -- the app only reads these.
-  // SCHEDULED = an added one-off class; CANCELLED = a regular class called
-  // off. changedBy/undoneBy make every change traceable to a person; an
-  // undone change is kept (not deleted) so the history stays complete.
+  // A dated change to a timetable, made by a CR (or an admin) through the
+  // section-changes Lambda -- the app only reads these. One action (e.g.
+  // "cancel IML on 22 Sep") writes one row per affected section, sharing a
+  // groupId. changedBy/undoneBy make every change traceable to a person;
+  // undo marks rows instead of deleting them, so the history stays complete.
   ScheduleChange: a
     .model({
+      groupId: a.string().required(),
+      kind: a.ref('ChangeKind').required(),
+      date: a.string().required(), // YYYY-MM-DD (IST)
       program: a.string().required(),
       branch: a.string().required(),
-      semester: a.integer(),
+      semester: a.integer().required(),
       section: a.string().required(),
-      day: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       courseId: a.string().required(),
+      sessionType: a.string(),
       room: a.string(),
-      changeType: a.ref('ChangeType').required(),
-      // The TimetableSlot a cancellation refers to.
+      faculty: a.string(),
+      // The regular class a cancellation / move refers to.
       relatedSlotId: a.id(),
-      changedBy: a.string(),
+      changedBy: a.string().required(), // email
+      changedBySub: a.string(),
+      changedBySection: a.string(),
       undoneBy: a.string(),
       undoneAt: a.datetime(),
     })
@@ -118,28 +132,39 @@ const schema = a.schema({
   // list. Takes precedence over RollRange, which only fits clean
   // contiguous ranges. Courses and faculty are NOT stored here -- they
   // follow from the section's TimetableSlot rows.
-  // Written only by the import-data Lambda (ADMIN group).
+  // Written only by the import-data Lambda (ADMIN group). Admin-only:
+  // students see just their own batch's roster via batchRoster, and their
+  // own section via mySection (the section-changes Lambda reads it for them).
   StudentSection: a
     .model({
       admissionYear: a.string().required(),
       rollNumber: a.integer().required(),
+      // The roll's letter prefix (IIT, IIB, IEC...). A batch can mix them
+      // -- IT Sem 5 holds both IIT and IIB students, and their numbering
+      // restarts per prefix, so IIB2024001 and IIT2024001 are two people.
+      rollPrefix: a.string(),
+      // As printed in the admin's student list. Admin-only, like the rest
+      // of this model.
+      name: a.string(),
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),
       section: a.string().required(),
       subSection: a.string(),
     })
-    .authorization((allow) => [allow.authenticated().to(['read']), allow.group('ADMIN')]),
+    .authorization((allow) => [allow.group('ADMIN')]),
 
-  // Common free slots across sections, ranked with reasons, a suggested
-  // room, and the blocking section when none exist (JSON string).
+  // Dated free slots for a course's sections and its professor, ranked
+  // with reasons and a free room, or who blocks it (JSON string).
   findSlots: a
     .query()
     .arguments({
       groups: a.string().array().required(), // "program|branch|semester|section"
+      dates: a.string().array().required(), // YYYY-MM-DD
+      courseId: a.string(), // adds the course professor's timetable
+      ignoreSlotId: a.string(), // a move: the class being moved doesn't block itself
       earliestTime: a.string(),
       latestTime: a.string(),
-      allowedDays: a.string().array(),
       minDurationMins: a.integer(),
     })
     .returns(a.json())
@@ -149,33 +174,63 @@ const schema = a.schema({
   // Timetable changes, all through the section-changes Lambda, where the
   // Cedar policy (functions/section-changes/policy.cedar) decides. Open to
   // every signed-in user on purpose -- the policy, not the API layer,
-  // decides who may do what.
+  // decides who may do what. Dates are YYYY-MM-DD.
+  // Read-only: the caller's own section, and their own batch's roster.
+  mySection: a
+    .query()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  batchRoster: a
+    .query()
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
   claimCr: a
     .mutation()
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
-  addClass: a
+  cancelOccurrence: a
+    .mutation()
+    .arguments({ slotId: a.id().required(), date: a.string().required() })
+    .returns(a.json())
+    .handler(a.handler.function(sectionChanges))
+    .authorization((allow) => [allow.authenticated()]),
+  addExtra: a
     .mutation()
     .arguments({
-      day: a.string().required(),
+      courseId: a.string().required(),
+      date: a.string().required(),
       startTime: a.string().required(),
       endTime: a.string().required(),
       room: a.string(),
-      purpose: a.string().required(),
+      // Subset of the course's sections; empty = all of them.
+      sections: a.string().array(),
+      // Admins only: which batch (a CR's batch is their own).
+      program: a.string(),
+      branch: a.string(),
+      semester: a.integer(),
     })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
-  cancelClass: a
+  moveOccurrence: a
     .mutation()
-    .arguments({ slotIds: a.id().array().required() })
+    .arguments({
+      slotId: a.id().required(),
+      fromDate: a.string().required(),
+      date: a.string().required(),
+      startTime: a.string().required(),
+      endTime: a.string().required(),
+      room: a.string(),
+    })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
   undoChange: a
     .mutation()
-    .arguments({ changeId: a.id().required() })
+    .arguments({ groupId: a.string().required() })
     .returns(a.json())
     .handler(a.handler.function(sectionChanges))
     .authorization((allow) => [allow.authenticated()]),
@@ -204,6 +259,7 @@ const schema = a.schema({
       semester: a.integer().required(),
       rollCol: a.integer(),
       emailCol: a.integer(),
+      nameCol: a.integer(),
       sectionCol: a.integer(),
       subSectionCol: a.integer(),
       admissionYear: a.string(),
@@ -221,23 +277,24 @@ const schema = a.schema({
     .handler(a.handler.function(importData))
     .authorization((allow) => [allow.group('ADMIN')]),
 
-  // Per-student course registration -- currently only meaningful for
-  // electives, since core courses are already implied by section
-  // membership in TimetableSlot. Intentionally left EMPTY for now: we
-  // don't have real per-student registration data yet. Schema exists so
-  // an admin-run ingestion pipeline (planned: OCR over registration
-  // sheets) has somewhere real to write once that data exists -- not
-  // fabricated here.
-  CourseRegistration: a
+  // Per-student exceptions to "you attend your home section's classes"
+  // (CLAUDE.md §4): ADD = roll X attends course C with section S of batch B
+  // (a drop-year/backlog student, or an elective choice; section '*' for a
+  // batch-wide elective); DROP = roll X doesn't take course C in their home
+  // section. Admin-uploaded; admin-only (it's personal). Students see the
+  // result through the mySection query.
+  Enrollment: a
     .model({
-      rollNumber: a.string().required(),
-      admissionYear: a.string().required(),
+      rollId: a.string().required(), // "IIT2023045", the email prefix upper-cased
+      courseId: a.string().required(),
+      action: a.ref('EnrollmentAction').required(),
+      // ADD: the group attended. DROP: the student's own batch.
       program: a.string().required(),
       branch: a.string().required(),
       semester: a.integer().required(),
-      courseId: a.string().required(),
+      section: a.string(), // ADD only
     })
-    .authorization((allow) => [allow.authenticated().to(['read'])]),
+    .authorization((allow) => [allow.group('ADMIN')]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

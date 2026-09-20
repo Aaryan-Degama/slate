@@ -23,6 +23,7 @@ type ParsedRow = {
   faculty: string | null
   source: string
   duration: string
+  isElective?: boolean
 }
 type Issue = { type: string; detail?: string; course?: string; section?: string; kind?: string; row?: string; rows?: string[] }
 type SheetResult =
@@ -276,7 +277,12 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
           <TimetableGrid
             grid={buildGrid(
               selected.rows.map(
-                (r) => ({ ...r, section: r.section === '*' ? wholeSection || 'whole batch' : r.section }) as BusyEntry,
+                (r) =>
+                  ({
+                    ...r,
+                    // Electives stay whole-batch; other unsectioned rows take the batch's section.
+                    section: r.section !== '*' || r.isElective ? r.section : wholeSection || 'whole batch',
+                  }) as BusyEntry,
               ),
             )}
           />
