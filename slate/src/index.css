@@ -8,19 +8,19 @@
   --border: #e3ebe7;
   --code-bg: #f5f7f6;
 
-  --accent: #187c55;
-  --accent-hover: #116c48;
-  --accent-bg: #e4f5eb;
-  --accent-border: #d7f3e1;
+  --accent: #048a8d;
+  --accent-hover: #116a6c;
+  --accent-bg: #e4f5f5;
+  --accent-border: #d7f2f3;
 
-  --sidebar-bg: #113c35;
-  --sidebar-bg-alt: #133d36;
-  --sidebar-text: #eaf4ef;
-  --sidebar-text-muted: #bfd4cb;
-  --sidebar-active: #23564b;
+  --sidebar-bg: #113b3c;
+  --sidebar-bg-alt: #133c3d;
+  --sidebar-text: #eaf4f4;
+  --sidebar-text-muted: #bfd4d4;
+  --sidebar-active: #235556;
 
-  --free: #187c55;
-  --free-bg: #e4f5eb;
+  --free: #048a8d;
+  --free-bg: #e4f5f5;
   --danger: #b23c35;
   --danger-bg: #fff1ed;
   --danger-border: #f4d2c7;
@@ -29,10 +29,10 @@
   --role-admin-text: #6542a2;
   --role-faculty-bg: #e9f2fa;
   --role-faculty-text: #376d99;
-  --role-student-bg: #edf6f0;
-  --role-student-text: #317653;
+  --role-student-bg: #edf6f6;
+  --role-student-text: #317476;
 
-  --shadow: 0 4px 17px rgba(23, 60, 48, 0.06);
+  --shadow: 0 4px 17px rgba(23, 59, 60, 0.06);
 
   --sans: 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
   --serif: 'Playfair Display', Georgia, serif;
@@ -98,4 +98,110 @@ code {
   border-radius: 4px;
   background: var(--code-bg);
   color: var(--text-h);
+}
+
+/* Page-header overline, ported from UniClass's eyebrow labels. */
+.eyebrow {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-heading h2 {
+  margin: 0;
+}
+
+.card-heading p {
+  color: var(--text);
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+/* Sign-in screen: split shell, ported from UniClass's login-shell. */
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 46%);
+}
+
+.login-intro {
+  background: var(--sidebar-bg-alt);
+  color: #f6fbfb;
+  padding: 54px clamp(32px, 8vw, 120px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+}
+
+.login-intro .brand {
+  color: #fff;
+}
+
+.login-intro .brand-mark {
+  height: 36px;
+}
+
+.login-intro h1 {
+  color: #fff;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.15;
+  max-width: 540px;
+  margin: 8px 0 18px;
+}
+
+.login-intro .eyebrow {
+  color: #8ad0d2;
+}
+
+.intro-copy {
+  max-width: 460px;
+  line-height: 1.7;
+  color: #c5d9d9;
+  font-size: 16px;
+  margin: 0;
+}
+
+.security-note {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: #d4e6e6;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.security-note span {
+  color: #75d6d8;
+  font-size: 24px;
+}
+
+.login-panel {
+  display: grid;
+  place-items: center;
+  padding: 36px;
+  background: var(--bg-subtle);
+}
+
+@media (max-width: 850px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+  .login-intro {
+    min-height: 300px;
+    padding: 32px;
+  }
+  .login-intro h1 {
+    font-size: 32px;
+  }
 }

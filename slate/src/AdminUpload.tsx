@@ -136,6 +136,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
   if (status === 'applied') {
     return (
       <div className="dashboard">
+        <p className="eyebrow">Done</p>
         <h1>Timetable updated</h1>
         <p className="subtitle">
           {appliedCount} change(s) applied to {batch?.program} {batch?.branch} Sem {batch?.semester}. Review anything that
@@ -157,6 +158,7 @@ export default function AdminUpload({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Upload Data</h1>
       <p className="subtitle">
         Upload a timetable spreadsheet or a student list (sections, or a B1/B2 split). The file is stored in S3 and a

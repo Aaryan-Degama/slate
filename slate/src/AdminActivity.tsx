@@ -33,6 +33,7 @@ export default function AdminActivity() {
   const shown = batch ? actions.filter((a) => a.batch === batch) : actions
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Activity</h1>
       <p>Every change CRs (or admins) made for this week and next, newest first. Undone changes stay listed with who undid them.</p>
       <label>

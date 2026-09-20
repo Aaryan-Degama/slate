@@ -134,6 +134,7 @@ export default function AdminDashboard({ onOpenStudents }: { onOpenStudents: () 
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Ingested Data</h1>
       <p className="subtitle">
         Real timetable data currently loaded into the system. Add or update a batch from the

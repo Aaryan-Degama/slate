@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Authenticator } from '@aws-amplify/ui-react'
+import { Authenticator, ThemeProvider, useAuthenticator, type Theme } from '@aws-amplify/ui-react'
 import NewRequest from './NewRequest'
 import MyBatch from './MyBatch'
 import StudentDashboard from './StudentDashboard'
@@ -37,7 +37,7 @@ function AppShell({
     <div className="app-shell">
       <header className="topbar-nav">
         <div className="brand">
-          <span className="brand-mark">S</span>
+          <img src="/logo.svg" alt="Slate" className="brand-mark" />
           <span>Slate</span>
         </div>
         <nav className="top-nav-items">
@@ -69,13 +69,120 @@ function AppShell({
   )
 }
 
+// Reskins Amplify UI's default theme to match Slate's own design tokens
+// (index.css) — colors, font and radius only. Sign-in/sign-up/reset
+// behavior is entirely Amplify's; nothing here changes what it does.
+const amplifyTheme: Theme = {
+  name: 'slate-theme',
+  tokens: {
+    fonts: {
+      default: {
+        variable: { value: 'DM Sans, system-ui, sans-serif' },
+        static: { value: 'DM Sans, system-ui, sans-serif' },
+      },
+    },
+    radii: {
+      small: { value: '7px' },
+      medium: { value: '7px' },
+      large: { value: '10px' },
+    },
+    components: {
+      authenticator: {
+        router: {
+          borderColor: { value: '#e3ebe7' },
+          borderWidth: { value: '1px' },
+          boxShadow: { value: '0 4px 17px rgba(23, 59, 60, 0.06)' },
+        },
+      },
+      button: {
+        primary: {
+          backgroundColor: { value: '#048a8d' },
+          _hover: { backgroundColor: { value: '#116a6c' } },
+          _focus: { backgroundColor: { value: '#116a6c' } },
+          _active: { backgroundColor: { value: '#116a6c' } },
+        },
+        link: {
+          color: { value: '#048a8d' },
+          _hover: { color: { value: '#116a6c' } },
+        },
+      },
+      tabs: {
+        item: {
+          _active: {
+            color: { value: '#048a8d' },
+            borderColor: { value: '#048a8d' },
+          },
+        },
+      },
+      fieldcontrol: {
+        _focus: {
+          borderColor: { value: '#299295' },
+          boxShadow: { value: '0 0 0 3px #d9f2f2' },
+        },
+      },
+    },
+  },
+}
+
+function AuthShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="login-shell">
+      <section className="login-intro">
+        <div className="brand">
+          <img src="/logo.svg" alt="Slate" className="brand-mark" />
+          <span>Slate</span>
+        </div>
+        <div>
+          <p className="eyebrow">IIIT Allahabad</p>
+          <h1>Every timetable change, in one place.</h1>
+          <p className="intro-copy">
+            A cancelled lecture, a makeup class, a moved session — agreed between a professor and
+            a CR, seen instantly by every section it touches. No more WhatsApp polls.
+          </p>
+        </div>
+        <div className="security-note">
+          <span>◈</span>
+          <div>
+            <strong>Restricted to IIITA accounts</strong>
+            <br />
+            Sign in with your @iiita.ac.in email.
+          </div>
+        </div>
+      </section>
+      <section className="login-panel">{children}</section>
+    </div>
+  )
+}
+
+// The split-screen shell (AuthShell) is only for the sign-in form. Once
+// authenticated, Authenticator's children take over the whole page, so we
+// use useAuthenticator to tell the two states apart and only wrap the
+// former — the shell must not wrap the signed-in app itself.
+function AuthGate() {
+  const { authStatus } = useAuthenticator((context) => [context.authStatus])
+  if (authStatus === 'authenticated') {
+    return (
+      <Authenticator>
+        {({ signOut, user }) =>
+          user ? <SignedIn key={user.userId} userId={user.userId} signOut={() => signOut?.()} /> : <></>
+        }
+      </Authenticator>
+    )
+  }
+  return (
+    <AuthShell>
+      <Authenticator />
+    </AuthShell>
+  )
+}
+
 function App() {
   return (
-    <Authenticator>
-      {({ signOut, user }) =>
-        user ? <SignedIn key={user.userId} userId={user.userId} signOut={() => signOut?.()} /> : <></>
-      }
-    </Authenticator>
+    <ThemeProvider theme={amplifyTheme}>
+      <Authenticator.Provider>
+        <AuthGate />
+      </Authenticator.Provider>
+    </ThemeProvider>
   )
 }
 

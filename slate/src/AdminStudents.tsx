@@ -153,6 +153,7 @@ export default function AdminStudents() {
 
   return (
     <div className="dashboard">
+      <p className="eyebrow">Admin</p>
       <h1>Students</h1>
       <p className="subtitle">
         Who is in which section: roll ranges (e.g. "B1 = rolls 108–160") and uploaded student lists. A student in an
