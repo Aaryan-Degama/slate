@@ -30,9 +30,6 @@ export function parseRoll(value: string) {
     roll: parseInt(rollStr, 10),
   }
 }
-/** "IIT" + 2024 + 45 -> "IIT2024045" */
-export const rollIdOf = (branch: string, year: string, roll: number) => `I${branch.toUpperCase()}${year}${String(roll).padStart(3, '0')}`
-
 /** A student's home section: the student list first, then a roll range. */
 export function homeOf(value: string, students: Row[], ranges: Row[]): Home | null {
   const p = parseRoll(value)

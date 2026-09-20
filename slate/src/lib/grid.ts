@@ -181,14 +181,3 @@ export function buildGrid(input: BusyEntry[], weekChanges: ChangeEntry[] = []): 
   );
 }
 
-/** Cells free across every one of the given per-section busy lists. */
-export function freeAcrossAll(busyBySection: BusyEntry[][]): Cell[][] {
-  const grids = busyBySection.map((b) => buildGrid(b));
-  return DAYS.map((_, di) =>
-    HOURS.map((_, hi) => {
-      const cells = grids.map((g) => g[di][hi]);
-      const free = cells.every((c) => c.busy.length === 0);
-      return { ...cells[0], busy: free ? [] : cells.flatMap((c) => c.busy) };
-    }),
-  );
-}
