@@ -6,7 +6,7 @@ import { runImport, type ImportResult } from './lib/importData'
 
 const client = generateClient<Schema>()
 
-export type ColumnGuess = { roll: number | null; email: number | null; section: number | null; subSection: number | null }
+export type ColumnGuess = { roll: number | null; email: number | null; name: number | null; section: number | null; subSection: number | null }
 export type TableSheet = {
   sheet: string
   kind: 'table'
@@ -20,6 +20,7 @@ type SlotRow = { program: string; branch: string; semester: number }
 const FIELDS: { key: keyof ColumnGuess; label: string; hint: string }[] = [
   { key: 'roll', label: 'Roll / enrollment number', hint: 'e.g. IIT2024245, 2024245 or 245' },
   { key: 'email', label: 'Institute email', hint: 'used for the roll number if there is no roll column' },
+  { key: 'name', label: 'Name', hint: 'shown in the admin student list' },
   { key: 'section', label: 'Section', hint: 'A, B, C' },
   { key: 'subSection', label: 'Sub-section', hint: 'B1, B2' },
 ]
@@ -64,6 +65,7 @@ export default function StudentImport({ sheet, fileKey }: { sheet: TableSheet; f
         semester: batch.semester,
         rollCol: mapping.roll,
         emailCol: mapping.email,
+        nameCol: mapping.name,
         sectionCol: mapping.section,
         subSectionCol: mapping.subSection,
         admissionYear: yearInput || null,

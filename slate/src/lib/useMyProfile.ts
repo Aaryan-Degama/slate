@@ -12,7 +12,7 @@ export type Profile = {
   email: string
   role: 'STUDENT' | 'FACULTY' | 'ADMIN'
   linkedSection: { program: string; branch: string; section: string; semester: number } | null
-  linkedFacultyName: string | null
+  changesSeenAt: string | null
 }
 // AWSJSON (linkedSection's real GraphQL type) travels over the wire as a
 // *string*; the normal generated client auto-(de)serializes it, but our
@@ -34,7 +34,7 @@ const createUser = client.models.User.create as unknown as (input: {
   role: 'STUDENT' | 'FACULTY' | 'ADMIN'
 }) => Promise<{ data: RawProfile | null; errors?: { message: string }[] }>
 const updateUser = client.models.User.update as unknown as (
-  input: { id: string; linkedSection?: string; linkedFacultyName?: string },
+  input: { id: string; linkedSection?: string; changesSeenAt?: string },
 ) => Promise<{ data: RawProfile | null; errors?: { message: string }[] }>
 
 /** Every signed-in user can read all User rows, so pick our own by the
@@ -87,9 +87,10 @@ export function useMyProfile(userId: string) {
     if (normalized) setProfile(normalized)
   }
 
-  const linkFacultyName = async (name: string) => {
+  /** Everything in the "What changed" feed up to now counts as seen. */
+  const markChangesSeen = async () => {
     if (!profile) return
-    const updated = await updateUser({ id: profile.id, linkedFacultyName: name })
+    const updated = await updateUser({ id: profile.id, changesSeenAt: new Date().toISOString() })
     if (updated.errors?.length) {
       throw new Error(updated.errors.map((e) => e.message).join('; '))
     }
@@ -97,5 +98,5 @@ export function useMyProfile(userId: string) {
     if (normalized) setProfile(normalized)
   }
 
-  return { profile, loading, error, linkSection, linkFacultyName }
+  return { profile, loading, error, linkSection, markChangesSeen }
 }
