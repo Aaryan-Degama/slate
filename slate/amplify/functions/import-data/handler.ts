@@ -341,8 +341,15 @@ export const handler = async (event: Event) => {
         unknownStudents++
         continue
       }
+      // Their own batch first; then any batch, because students do take
+      // courses elsewhere -- a backlog course with a junior batch, a minor
+      // or an open elective (docs/DATA-MODEL.md).
       const mine = byBatch.get(`${student.program}|${student.branch}|${Number(student.semester)}`) ?? []
-      const m = matchOffering(reg, mine)
+      let m = matchOffering(reg, mine)
+      if (!m.offeringKey) {
+        const elsewhere = matchOffering(reg, offerings)
+        if (elsewhere.offeringKey) m = elsewhere
+      }
       if (!m.offeringKey) {
         problems.push({ line: reg.line, problems: [`${reg.rollId} ${m.reason}`] })
         continue

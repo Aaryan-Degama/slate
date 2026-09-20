@@ -17,7 +17,7 @@ export type Row = {
   isElective: boolean
 }
 export type Batch = { program: string; branch: string; semester: number }
-export type Legend = Record<string, { name: string; ltps: number[] | null; core: boolean }>
+export type Legend = Record<string, { name: string; ltps: number[] | null; core: boolean; faculty?: Record<string, string> }>
 
 /** Same professor written two ways is still one offering. */
 export const facultyKey = (name: string | null) =>
@@ -108,6 +108,22 @@ export function buildOfferings(rows: Row[], batch: Batch, legend: Legend, term: 
         ...(r.sessionType ? { sessionType: r.sessionType } : {}),
         ...(group ? { group } : {}),
       })
+  }
+
+  // Courses the sheet's legend lists but never places in the grid -- the
+  // HSS electives (Entrepreneurial Finance, Happiness Indices...) are
+  // timetabled outside the departmental sheet. Keep them as offerings with
+  // no meetings so registrations attach and a student is told their class
+  // times aren't published rather than the course vanishing.
+  for (const [code, info] of Object.entries(legend)) {
+    if (courses.has(code)) continue
+    const kind = /^MDM/i.test(code) ? 'MINOR' : info.core ? 'CORE' : 'ELECTIVE'
+    courses.set(code, { term, code, ...(info.name ? { name: info.name } : {}), kind, ...(info.ltps ? { ltps: info.ltps.join('-') } : {}) })
+    for (const faculty of [...new Set(Object.values(info.faculty ?? {}))]) {
+      const key = offeringKeyOf(term, batch, code, faculty)
+      if (!offerings.has(key))
+        offerings.set(key, { offeringKey: key, term, courseCode: code, ...(info.name ? { courseName: info.name } : {}), kind, faculty, sections: [] })
+    }
   }
 
   for (const o of offerings.values()) o.sections.sort()

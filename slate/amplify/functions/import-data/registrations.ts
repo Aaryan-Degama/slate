@@ -24,7 +24,12 @@ export function sameFaculty(a: string, b: string): boolean {
   const [x, y] = [words(a), words(b)]
   if (!x.length || !y.length) return false
   const [short, long] = x.length <= y.length ? [x, y] : [y, x]
-  return short.every((w) => long.includes(w))
+  // Timetables shorten and mistype names ("Dr. Nikhiland" for Dr.
+  // Nikhilanand Arya), so a word counts as matched when it prefixes one of
+  // the other's, or when both are long and share a seven-letter stem.
+  const like = (v: string, w: string) =>
+    v === w || v.startsWith(w) || w.startsWith(v) || (v.length >= 7 && w.length >= 7 && v.slice(0, 7) === w.slice(0, 7))
+  return short.every((w) => long.some((v) => like(v, w)))
 }
 
 /** Course names are sometimes truncated or punctuated differently. */

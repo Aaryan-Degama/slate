@@ -16,7 +16,7 @@ import {
   type BusyEntry,
   type ChangeEntry,
 } from './lib/grid'
-import { addExtra, cancelOccurrence, claimCr, sectionKey, undoChange, type ClassRep } from './lib/classReps'
+import { addExtra, cancelOccurrence, claimCr, moveOccurrence, sectionKey, undoChange, type ClassRep } from './lib/classReps'
 import { toActions, type Action } from './lib/changes'
 import ActionLine from './components/ActionLine'
 import type { Profile } from './lib/useMyProfile'
@@ -169,6 +169,8 @@ function MyTimetable({
   const [panel, setPanel] = useState<Panel | null>(null)
   const [offeringKey, setOfferingKey] = useState('')
   const [room, setRoom] = useState('')
+  // Shortening or shifting one occurrence: "10–12 runs 11–12 this week".
+  const [retime, setRetime] = useState<{ start: string; end: string } | null>(null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -241,6 +243,7 @@ function MyTimetable({
       await Promise.all([load(), reloadReps()])
       setPanel(null)
       setRoom('')
+      setRetime(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.')
     } finally {
@@ -249,6 +252,7 @@ function MyTimetable({
   }
   const open = (p: Panel, date: string) => {
     setError('')
+    setRetime(null)
     if (date < today) return setError(`${formatDate(date)} has already passed.`)
     setPanel(p)
     if (p.kind === 'add' && !myOfferings.some((o) => o.offeringKey === offeringKey)) setOfferingKey(myOfferings[0]?.offeringKey ?? '')
@@ -385,15 +389,53 @@ function MyTimetable({
                 <button type="button" disabled={working} onClick={() => act(() => undoChange(panel.entry.cancelled!.groupId!))}>
                   {working ? 'Undoing...' : 'Undo'}
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  className="danger"
-                  disabled={working}
-                  onClick={() => act(() => cancelOccurrence(panel.entry.id!, panel.date))}
+              ) : retime ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (retime.start >= retime.end) return setError('The class has to end after it starts.')
+                    act(() =>
+                      moveOccurrence({
+                        meetingId: panel.entry.id!,
+                        fromDate: panel.date,
+                        date: panel.date,
+                        startTime: retime.start,
+                        endTime: retime.end,
+                        room: room.trim() || null,
+                      }),
+                    )
+                  }}
                 >
-                  {working ? 'Cancelling...' : `Cancel on ${formatDate(panel.date)}`}
-                </button>
+                  <span>Runs from</span>
+                  <input type="time" value={retime.start} onChange={(e) => setRetime({ ...retime, start: e.target.value })} />
+                  <span>to</span>
+                  <input type="time" value={retime.end} onChange={(e) => setRetime({ ...retime, end: e.target.value })} />
+                  <input placeholder="Room (optional)" value={room} onChange={(e) => setRoom(e.target.value)} />
+                  <button type="submit" className="primary" disabled={working}>
+                    {working ? 'Saving...' : 'Save this time'}
+                  </button>
+                  <button type="button" disabled={working} onClick={() => setRetime(null)}>
+                    Back
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() => setRetime({ start: panel.entry.startTime, end: panel.entry.endTime })}
+                  >
+                    Change the time
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={working}
+                    onClick={() => act(() => cancelOccurrence(panel.entry.id!, panel.date))}
+                  >
+                    {working ? 'Cancelling...' : `Cancel on ${formatDate(panel.date)}`}
+                  </button>
+                </>
               )}
             </>
           )}

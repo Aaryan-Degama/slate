@@ -82,7 +82,7 @@ export type SheetResult = {
   skipped: Skipped[]
   issues: Issue[]
   /** Course code -> what the sheet's legend says about it. */
-  legend: Record<string, { name: string; ltps: number[] | null; core: boolean }>
+  legend: Record<string, { name: string; ltps: number[] | null; core: boolean; faculty: Record<string, string> }>
 }
 
 const to24h = (h: string, m: string) => {
@@ -500,7 +500,7 @@ export function processSheet(ws: Worksheet): SheetResult {
     skipped,
     issues,
     legend: Object.fromEntries(
-      Object.entries(sheet.legend).map(([code, l]) => [code, { name: l.name, ltps: l.ltps, core: l.core }]),
+      Object.entries(sheet.legend).map(([code, l]) => [code, { name: l.name, ltps: l.ltps, core: l.core, faculty: l.faculty }]),
     ),
   }
 }

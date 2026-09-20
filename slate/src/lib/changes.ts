@@ -74,6 +74,9 @@ const when = (r: ChangeRow) => `${formatDate(r.date)} ${r.startTime}–${r.endTi
 
 /** "Cancelled on Fri 25 Sep 14:30–15:30" / "Moved Thu 24 Sep 09:00–10:00 → Fri 25 Sep 16:30–17:30" */
 export function describe(a: Action): string {
+  // Same day: the class just runs at a different time (often shortened).
+  if (a.kind === 'MOVED' && a.from!.date === a.to!.date)
+    return `On ${formatDate(a.to!.date)} runs ${a.to!.startTime}–${a.to!.endTime} instead of ${a.from!.startTime}–${a.from!.endTime}${a.to!.room ? ` in ${a.to!.room}` : ''}`
   if (a.kind === 'MOVED') return `Moved ${when(a.from!)} → ${when(a.to!)}${a.to!.room ? ` in ${a.to!.room}` : ''}`
   if (a.kind === 'CANCELLED') return `Cancelled on ${when(a.from!)}`
   return `Extra class on ${when(a.to!)}${a.to!.room ? ` in ${a.to!.room}` : ''}`
