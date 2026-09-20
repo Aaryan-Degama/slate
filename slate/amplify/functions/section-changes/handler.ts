@@ -295,8 +295,10 @@ export const handler = async (event: Event) => {
     const sub = home.subSection
     const myMeetings = meetings
       .filter((m) => mine.has(String(m.offeringKey)))
-      // A lab split: only the student's own half attends.
-      .filter((m) => !m.group || !sub || m.group === sub)
+      // A lab split (group "B1"/"B2"): only that half attends. A student
+      // whose own split isn't known yet sees both halves of their section's
+      // labs, and never another section's.
+      .filter((m) => !m.group || m.group === sub || (!sub && String(m.group)[0] === home.section))
       .map((m) => {
         const o = myOfferings.find((x) => x.offeringKey === m.offeringKey)
         return {
