@@ -26,9 +26,9 @@
   align-items: center;
   gap: 10px;
   font-family: var(--display);
-  font-weight: 700;
-  font-size: 19px;
-  letter-spacing: -0.03em;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.01em;
   color: #fff;
 }
 
@@ -215,6 +215,7 @@ fieldset {
 legend {
   font-family: var(--display);
   font-weight: 700;
+  font-size: 17px;
   color: var(--text-h);
   padding: 0 6px;
 }
@@ -257,8 +258,8 @@ legend {
 .stat-tile .value {
   display: block;
   font-family: var(--display);
-  font-size: 27px;
-  font-weight: 700;
+  font-size: 29px;
+  font-weight: 800;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
@@ -306,8 +307,8 @@ legend {
 
 .up-next .what {
   font-family: var(--display);
-  font-size: clamp(20px, 2.2vw, 25px);
-  font-weight: 700;
+  font-size: clamp(22px, 2.3vw, 28px);
+  font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
@@ -428,6 +429,7 @@ legend {
   cursor: pointer;
   font-family: var(--display);
   font-weight: 700;
+  font-size: 18px;
   color: var(--text-h);
   margin-bottom: 8px;
 }

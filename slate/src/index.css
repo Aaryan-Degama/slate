@@ -5,7 +5,7 @@
  * face because they are the data people actually read. Changes are
  * annotations on that print (struck through, stamped), and amber is
  * reserved for one thing only: now. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
   /* Ink on paper */
@@ -46,10 +46,11 @@
   --shadow: 0 1px 2px rgba(21, 24, 29, 0.04), 0 8px 24px -12px rgba(21, 24, 29, 0.18);
   --shadow-lift: 0 2px 4px rgba(21, 24, 29, 0.05), 0 18px 36px -18px rgba(21, 24, 29, 0.28);
 
-  /* Plus Jakarta Sans: humanist rather than geometric, so it stays warm
-   * at 14px in a dense grid. Headings and body share it; hierarchy comes
-   * from weight and spacing. */
-  --display: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Headings are set in Playfair Display at its heavier weights: the
+   * high-contrast serif gives the page a voice, and the weight keeps it
+   * from turning delicate. Plus Jakarta Sans carries the interface text,
+   * where a humanist sans stays warm at 14px in a dense grid. */
+  --display: 'Playfair Display', Georgia, serif;
   --sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   --serif: var(--display);
@@ -89,20 +90,20 @@ h2,
 h3 {
   font-family: var(--display);
   color: var(--text-h);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  /* A serif this dark doesn't want the tight tracking a grotesque does. */
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   margin: 0 0 8px;
 }
 
 h1 {
-  font-size: clamp(26px, 2.6vw, 34px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: clamp(27px, 2.7vw, 36px);
+  font-weight: 800;
 }
 
 h2 {
-  font-size: 19px;
-  font-weight: 600;
+  font-size: 21px;
+  font-weight: 700;
 }
 
 p {
