@@ -2,7 +2,20 @@
 
 **Your real timetable at IIIT Allahabad — including the class that just got cancelled.**
 
-Live: **https://main.dosqfo1xoqa7l.amplifyapp.com** (sign-in is limited to `@iiita.ac.in` accounts)
+Live: **https://main.dosqfo1xoqa7l.amplifyapp.com**
+
+> ### Sign in and look around, no registration
+>
+> Sign-up is restricted to `@iiita.ac.in` addresses, so four accounts are ready for you. Password for all of them: **`SlateDemo#2026`**
+>
+> | Sign in as | Password | What you see |
+> |---|---|---|
+> | `iit2024059@iiita.ac.in` | `SlateDemo#2026` | **Start here.** A real student's week, with an elective and a course taken with the junior batch |
+> | `iit2024245@iiita.ac.in` | `SlateDemo#2026` | The same, plus **class representative** powers: cancel, move or add a class |
+> | `iib2024001@iiita.ac.in` | `SlateDemo#2026` | A classmate in the same section whose week is different |
+> | `demo-admin@iiita.ac.in` | `SlateDemo#2026` | The admin side: uploads, students, class reps, activity log |
+>
+> They are live accounts on real data, so a change made in one is visible in the others. That is the product.
 
 Built for **First Commit** (WeMakeDevs × AWS), Sept 17–20, 2026. Ship It track.
 
@@ -25,18 +38,12 @@ And "the timetable" isn't one thing. A fifth-semester IT student takes core cour
 
 Deliberately not built: voting or polls, chat, recurring changes, student-editable timetables.
 
-## Try it without signing up
+## A two minute tour
 
-These accounts are already set up, so you can look around without creating one. Password for all four: **`SlateDemo#2026`**
-
-| Sign in as | You get |
-|---|---|
-| `iit2024245@iiita.ac.in` | A fifth-semester IT student **and Sec C's class representative** — cancel a class, add an extra one, move or shorten one |
-| `iit2024059@iiita.ac.in` | Another student, Sec A: a different elective, plus a third-semester course taken with the junior batch |
-| `iib2024001@iiita.ac.in` | A B.Tech BI student in the same section, to see how two classmates' weeks differ |
-| `demo-admin@iiita.ac.in` | The admin side: uploads, students, class reps, activity |
-
-They're real accounts on the live app, so changes one makes are visible to the others — which is the point.
+1. Sign in as **`iit2024059`** and open **My courses**. Alongside their section's core courses there is an elective (**EF**) and a third-semester course (**SE**) taken with the junior batch. No printed timetable shows that.
+2. Sign in as **`iit2024245`** in another window. This one is **Sec C's class representative**: click a class and cancel it on a date, or use **Make a change** to find a slot for a makeup class.
+3. Go back to the first window and refresh. The change is on the grid, struck through, with the CR's roll number on it, and listed under **What changed**.
+4. Sign in as **`demo-admin`** to see where the data comes from: **Upload Data** reads the institute's own spreadsheets, and **Activity** logs every change anyone made.
 
 ## How the data works
 
