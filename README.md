@@ -67,7 +67,7 @@ flowchart TB
 
   subgraph aws[AWS]
     HOST[Amplify Hosting<br/>public URL, CI]
-    COG[Cognito<br/>@iiita.ac.in gate · ADMIN group]
+    COG["Cognito<br/>@iiita.ac.in gate · ADMIN group"]
     API[AppSync GraphQL]
     DDB[(DynamoDB<br/>12 tables, GSIs, TTL)]
     S3[(S3<br/>uploaded spreadsheets)]
