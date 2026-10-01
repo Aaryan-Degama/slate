@@ -1,6 +1,7 @@
 # CONTEXT.md — lessons from Slate, for the next AWS hackathon
 
 **Who this is for:** Claude Code (and us) at the start of the next AWS-based hackathon.
+**Companion file:** [`AWS.md`](AWS.md) explains every AWS service, its configuration and the request flows in detail.
 **How to use it:** copy this file into the new repo and add one line to the new `CLAUDE.md`: *"Read `CONTEXT.md` before planning. Repeat what scored; fix what held us back."* Everything here comes from what we actually built in Slate (First Commit, WeMakeDevs × AWS, Sept 2026) and from what the judges actually wrote about it.
 
 ---
