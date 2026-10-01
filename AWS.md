@@ -1,6 +1,6 @@
 # AWS.md — how Slate is built on AWS
 
-This file explains Slate in AWS terms: which services we used and how each was configured, how they're wired together, what happens inside AWS on each user action, and why. For the lessons and the judges' feedback, see [`CONTEXT.md`](CONTEXT.md).
+This file explains Slate in AWS terms: which services we used and how each was configured, how they're wired together, what happens inside AWS on each user action, and why. For the lessons and the judges' feedback, see [`LESSON.md`](LESSON.md).
 
 **Region:** `ap-south-1` (Mumbai) · **Live:** https://main.dosqfo1xoqa7l.amplifyapp.com · **Cost:** $0.00 month-to-date
 
@@ -221,7 +221,7 @@ aws logs tail /aws/lambda/<section-changes-function> --since 15m --region ap-sou
 
 - App `dosqfo1xoqa7l`, branch `main` → `https://main.dosqfo1xoqa7l.amplifyapp.com`, served over Amplify's managed CDN with HTTPS.
 - **How we deployed:** a manual deployment (`scripts/deploy-frontend.sh`) running `npm run build`, zipping `dist/`, then `aws amplify create-deployment` → PUT the zip to the presigned URL → `start-deployment` → poll `get-job` until `SUCCEED`. This used no build minutes and took seconds.
-- **The CI path** (`amplify.yml`, connect the GitHub repo) deploys backend and frontend together on every push to `main`. We set it up but didn't switch to it; doing that from day 1 is a lesson in `CONTEXT.md`.
+- **The CI path** (`amplify.yml`, connect the GitHub repo) deploys backend and frontend together on every push to `main`. We set it up but didn't switch to it; doing that from day 1 is a lesson in `LESSON.md`.
 
 ---
 

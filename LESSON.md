@@ -1,8 +1,8 @@
-# CONTEXT.md — lessons from Slate, for the next AWS hackathon
+# LESSON.md — lessons from Slate, for the next AWS hackathon
 
 **Who this is for:** Claude Code (and us) at the start of the next AWS-based hackathon.
 **Companion file:** [`AWS.md`](AWS.md) explains every AWS service, its configuration and the request flows in detail.
-**How to use it:** copy this file into the new repo and add one line to the new `CLAUDE.md`: *"Read `CONTEXT.md` before planning. Repeat what scored; fix what held us back."* Everything here comes from what we actually built in Slate (First Commit, WeMakeDevs × AWS, Sept 2026) and from what the judges actually wrote about it.
+**How to use it:** copy this file into the new repo and add one line to the new `CLAUDE.md`: *"Read `LESSON.md` before planning. Repeat what scored; fix what held us back."* Everything here comes from what we actually built in Slate (First Commit, WeMakeDevs × AWS, Sept 2026) and from what the judges actually wrote about it.
 
 ---
 
@@ -304,8 +304,8 @@ IIITA specifics were spread through the code: the `@iiita.ac.in` domain in the t
 ## 7. Paste this into the next project's CLAUDE.md
 
 ```markdown
-## Carried over from Slate (see CONTEXT.md)
-- Read CONTEXT.md before planning. It records what judges praised (AWS architecture, Cedar,
+## Carried over from Slate (see LESSON.md)
+- Read LESSON.md before planning. It records what judges praised (AWS architecture, Cedar,
   server-derived identity, TTL, dry-run imports, explainable algorithms, cost discipline)
   and what cost us points (no tests; single-format coupling; late UI and video).
 - Pre-approved dependencies: vitest, @cedar-policy/cedar-wasm, exceljs.
